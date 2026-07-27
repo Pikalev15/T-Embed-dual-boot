@@ -1,264 +1,337 @@
 > [!CAUTION]
-> ## 🚨 SECURITY WARNING — DO NOT FLASH "L15Dev" FIRMWARE 🚨
+> ## Security warning
 >
-> A firmware build distributed under the name **"L15Dev" / "Bitwire"** has been reported to contain **malware (a virus) and a backdoor**. **Do not download, flash, or run it under any circumstances.**
->
-> Only use the official builds from this repository / the [web flasher](https://sor3nt.github.io/interface.html). If you already flashed an "L15Dev" image, re-flash a clean official build and treat any credentials/data on the device (WiFi passwords, captures) as compromised.
+> Do not flash unofficial firmware distributed under the names **L15Dev** or **Bitwire**. Use source you can inspect and builds produced from a trusted checkout of this repository.
 
-> WARNING: I do not take responsibility if you damage your board or property. This guide is for educational purposes only — proceed at your own risk.
+> [!WARNING]
+> This branch is experimental. The current dual-boot implementation has not yet been tested on the author’s physical T-Embed because the board is still in transit. A successful build does not guarantee that display, input, rebooting, OTA selection, power management, or every application will work on real hardware.
 
-# Flipper Zero ESP32 Port
+# T-Embed Dual Boot
 
-A port of the [Flipper Zero](https://flipperzero.one/) firmware to ESP32-based development boards. This project brings the Flipper Zero UI, services, and application framework to affordable ESP32 hardware — no Flipper Zero required.
+Dual-boot firmware for the **LilyGo T-Embed CC1101**, combining:
 
-## Discord
+- the [Flipper Zero ESP32 Port](https://github.com/Sor3nt/Flipper-Zero-ESP32-Port)
+- [Bruce](https://github.com/BruceDevices/firmware)
 
-Join the [Flipper Zero meets ESP32 - Discord](https://discord.gg/5DnAqFXaBC) for support and announcements.
+The Flipper-style firmware runs from `ota_0`. Bruce runs from `ota_1`. Each firmware contains an entry that selects the other OTA slot and restarts the device.
 
-## Supported Boards
+![T-Embed](pic1.jpg)
 
-![img](pic1.jpg)
+## Branch status
 
-| Board | MCU | Display | Input | SubGHz | NFC | IR | SD Card |
-|---|---|---|---|---|---|---|---|
-| **LilyGo T-Embed CC1101** | ESP32-S3 (Xtensa LX7) | ST7789 320×170 | Rotary encoder + button | CC1101 | PN532 (I2C) | RMT TX + RX | SPI |
-| **Waveshare ESP32-C6-LCD-1.9** | ESP32-C6 (RISC-V) | ST7789V2 320×172 | CST816S touch | — | — | — | SPI |
-| **Waveshare ESP32-C6-LCD-1.47** ⚠️ | ESP32-C6 (RISC-V) | JD9853 320×172 | AXS5106L touch | — | — | — | SPI |
-| ** DIY ESP32-S3 with 2.8" TFT ** ⚠️| ESP32-S3 (Xtensa LX7) |2.8  ILI9341 320×240 | 6× Tactile buttons | CC1101 | PN532 (I2C) |  TX  | SPI |
+This README describes the `restore-bruce-dual-boot` branch.
 
-
-> ⚠️ **Waveshare ESP32-C6-LCD-1.47 — supported but barely usable.** The board builds, boots and the UI/touch work, but the ESP32-C6 has only **512 KB SRAM and no PSRAM**. RAM-heavy apps are effectively non-functional. In particular **WiFi**: a normal AP scan works, but **monitor mode / handshake capture fails** — by the time the app's buffers are allocated the WiFi driver can no longer allocate its DMA buffers (`esf_buf_setup_static: alloc eb fail` → `ESP_ERR_NO_MEM`), so no frames are received. Treat this board as usable only for lightweight apps until the WiFi app's memory footprint is reduced (it was designed for the PSRAM-equipped T-Embed).
-
-> ⚠️ ** DIY ESP32-S3 with 2.8" TFT ** - Currently supported via a fork pending full integration, work in progress, ready to flash bins also available in the discord, updated each release
-
-![img](pic2.jpg)
-
-## How to Flash
-
-The easiest way is the **web flasher** — no toolchain required, just a Chrome/Edge browser and a USB cable:
-
-**[Flash via Browser](https://sor3nt.github.io/interface.html)**
-
-Connect your board, click flash, done. After flashing, copy the contents of [`https://github.com/Sor3nt/Flipper-Zero-ESP32-Port/releases/download/v1.1.5/sdcard.zip`](sdcard/) onto a FAT32 SD card and insert it — most apps need files there to function.
-
-## Apps
-
-### 📡 Wireless / RF
-
-#### Sub-GHz
-External CC1101 receiver/transmitter for 433–868 MHz signals.
-- Receive & decode
-- Read RAW: capture unknown waveforms to `.sub` files for later analysis
-- Frequency analyzer with sweep & live RSSI
-- Hopper: scan all preset bands during receive
-- Transmit saved files; manual signal creation (frequency, modulation, protocol, key/serial/counter)
-- Brute force / sub-brute attack with manufacturer dictionary
-- Playlist for sequential transmit
-- **TPMS decoding** — tire-pressure sensors: Schrader GG4, Citroën, Ford, Renault, Toyota (PMV107J) and a generic decoder; dedicated info view with editable sensor data
-- **Limitation:** AES-encrypted manufacturer keystores (`keeloq_mfcodes`, `nice_flor_s`, `alutech_at_4n`) are not decryptable on this port — only the plain-text `keeloq_mfcodes_user` works for Keeloq decoding.
-
-#### Sub-GHz Remote
-Multi-button remote layouts that batch saved `.sub` files. Map Up/Down/Left/Right/OK to individual transmit signals; switch between persistent remote profiles.
-
-#### WiFi
-Full WiFi pentest toolkit.
-- **Scanner** — SSID, BSSID, channel, RSSI, auth mode
-- **Connect** — auto-detect WPA/WPA2/WPA3, password input or saved password lookup (`/ext/wifi/<ssid>.txt`)
-- **Deauther** — SSID-mode (single AP) or Channel-mode (all on channel)
-- **Sniffer** — capture packets to PCAP
-- **Handshake capture** — record EAPOL 4-way handshakes, optionally with deauth trigger
-- **AirSnitch** — auto-bruteforce target with password list
-- **Beacon Spam** — Funny SSIDs / Rickroll / Random / Custom
-- **Network Scan / Port Scan** — host discovery + 19 common-port probe on the connected network
-- **Web Crawler** — domain-based web crawler
-- **Evil Portal** — captive portal with credential harvesting
-  - Built-in templates: Google login, Router firmware update
-  - Custom templates from `/ext/wifi/evil_portal/login_template/*.html` and `/ext/wifi/evil_portal/router_template/*.html` (filename = template name in dropdown)
-  - Marker substitution: `%ERROR%`, `%SSID_OPTIONS%` (live AP scan)
-  - Router-style verify flow: dropdown of real SSIDs, live WLAN re-auth check, captured-credentials screen on success, retry with error banner on fail
-  - Pause/Resume of the AP from the run screen
-  - Captured creds saved to `/ext/wifi/evil_portal/<ssid>_creds.csv`
-  - **Internet bridge** *(new)* — optional STA uplink with NAPT + DNS forwarding so victims get real internet behind the portal; iOS captive-portal "Success" handling; uplink SSID/password configured in-app
-
-#### Mesh / Buddy *(ESP-NOW)*
-Pair cheap headless ESP32 boards (**buddies**) to the T-Embed (**master**) over ESP-NOW to offload WiFi capture and run remote actions.
-- Buddy discovery, pair/remove and live status from the lock menu → **Mesh Clients**
-- **Device Identify** — make a paired buddy blink to locate it
-- **WiFi handshake capture** — buddy passively captures EAPOL handshakes on a chosen channel (1–13)
-- **Store-and-forward** — the buddy holds each complete handshake (M1–M4 + beacon) durably (RAM + NVS) per BSSID and delivers it as one acknowledged unit, surviving master absence and buddy reboots
-- One `.pcap` per network written to `/ext/wifi/buddy_<name>_<ssid>.pcap`; "Handshake received" overlay on all mesh views
-- Buddy firmware ships in this repo under [`buddy_firmware/`](buddy_firmware/) (standalone headless ESP-IDF project)
-
-#### Bluetooth
-- **BLE Spam** — Apple Continuity (Pair/Action/NotYourDevice), Google FastPair (455+ models), Microsoft SwiftPair, Samsung Buds & Watch, Xiaomi QuickConnect
-- **BLE Walk** — passive scanner with GATT service/characteristic inspection
-- **BLE Clone** *(dev)* — replicate active BLE advertisements
-- **FindMy** — emulate Apple AirTag, Samsung SmartTag, Tile beacons (clone or generate keypairs)
-- **HID** *(see below)* — keyboard/mouse/media remote over BLE
-- **Bad USB** — via USB or BLE
-
-#### NRF24 *(2.4 GHz, external nRF24L01)*
-- **Spectrum analyzer** — live 2.4 GHz channel activity
-- **Jammer** *(rewritten)* — one engine with switchable channel sources (Protocol / Manual / WiFi / Activity scan), strategies (CW / Flood / Turbo) and presets; configuration persists per source
-- **MouseJacker** — inject keystrokes into vulnerable wireless mice/keyboards
-- Also available as a FAP (`nRF24_jammer`)
-
-#### Infrared
-RMT-based TX + RX.
-- Learn signals (auto-decoded or raw)
-- Browse, edit, and send saved remotes
-- Universal remotes: TV, AC, audio, projectors, fans, LED controllers (databases on SD)
-- Brute force category-based databases
-- Configurable IR pin and 5 V GPIO power
-- Protocols: NEC, NEC42, Samsung32, RC5/RC5X, RC6, SIRC 12/15/20, Kaseikyo, RCA, Pioneer
-
-### 🪪 NFC
-
-#### NFC *(PN532 over I2C)*
-- Read, save, emulate, write NFC cards/tags
-- Manual card generation (custom UID/ATQA/SAK)
-- Mifare Classic dictionary attack (system + user dictionaries)
-- Mifare Ultralight-C dictionary unlock
-- ISO15693 SLIX unlock with manual or stored DEF key
-- FeliCa system info, MIFARE DESFire app inspection, EMV transaction history
-- 14 supported protocols: ISO14443-3A/3B/4A/4B, ISO15693-3, FeliCa, MIFARE Classic/Ultralight/Plus/DESFire, SLIX, ST25TB, NTAG4xx, Type-4
-- 30+ supported card auto-parsers (Charlie Card, Clipper, EMV, Gallagher, HID, Opal, Skylanders, Troika, …)
-
-
-#### Passy *(FAP)*
-Biometric passport (MRTD) reader — reads and displays data groups from ePassports over NFC. Shipped as a prebuilt FAP in [`sdcard/apps/`](sdcard/apps/).
-
-#### TagTinker *(FAP)*
-Infrared ESL (Electronic Shelf Label) research toolkit. Transmits custom images/text to graphics tags via IR. RLE streaming, Android companion app for image editing, monochrome + accent-color support.
-
-### ⌨️ HID / USB
-
-#### Bad USB
-HID payload runner for Ducky-script (`.txt`) files from `/ext/badusb/`.
-- 16+ Ducky commands (DELAY, STRING, REPEAT, HOLD/RELEASE, MEDIA keys, mouse, ALT-CHAR/ALT-STRING, SYSRQ)
-- Layouts under `/ext/badusb/assets/layouts/*.kl` (~30 included)
-- Configurable USB VID/PID + device name
-- BLE bonding with custom MAC and PIN-verify pairing
-- Mouse movement, scroll, button emulation; per-character typing delay
-- **Transport:** USB OTG (TinyUSB) on T-Embed, BLE on Waveshare
-
-### 🛠 System / Tools
-
-#### Lock Menu / System Toggles
-The desktop lock menu doubles as the central system control panel (board-dependent, scrollable):
-- **qFlipper** — enable the qFlipper desktop bridge (VID/PID spoof + CDC RPC) so the official qFlipper app can connect *(USB-OTG boards)*
-- **USB Storage** — expose the SD card as a USB mass-storage device *(USB-OTG boards)*
-- **Bluetooth** — toggle BLE on/off
-- **Switch to Bruce** — reboot into the co-installed [Bruce](https://github.com/BruceDevices/firmware) firmware (when present on the second OTA slot)
-- **Mesh Clients** — buddy discovery & control *(see Mesh / Buddy above)*
-
-#### Archive
-SD-card file browser with tabs per media type: Favorites, Sub-GHz, NFC, LF-RFID, Infrared, iButton, Bad USB, U2F, Apps, Internal, Browser. Pin/unpin favorites; copy, paste, rename, delete, create folder.
-
-#### JS Runner
-mJS-based JavaScript runtime for user scripts in `/ext/apps/Scripts/*.js`.
-- **Available modules:** `gui` (loading/menu/dialogs/text+byte input/popup/file picker/widget), `notification`, `math`, `storage`, `event_loop`, `subghz`, `infrared`, `badusb`, `blebeacon`
-- **Excluded on this port** *(need HAL porting)*: `js_serial`, `js_gpio`, `js_i2c`, `js_spi`
-
-### 🎮 Games
-
-#### Doom
-Full DOOM port. Place `doom1.wad` at `/ext/apps_data/doom/doom1.wad`. Encoder turns; click fires (short) / walks forward (long). Side-button uses doors/switches (short) / opens menu (long).
-
-#### Snake
-Classic snake game.
-
-### ⚙ Settings & General
-Bluetooth, backlight, clock, dolphin/passport, expansion port, input, notification, power, storage, system info, factory reset. Animated dolphin desktop on idle. File-pack manifest at `/ext/Manifest` (qFlipper-style asset list — its presence suppresses the "No DB" boot animation).
-
-## SD Card Layout
-
-| Path | Used by |
+| Area | Status |
 |---|---|
-| `/ext/Manifest` | Desktop (presence check) |
-| `/ext/dolphin/` + `manifest.txt` | Idle animations |
-| `/ext/apps_assets/nfc/plugins/` | NFC protocol plugins (.fal) |
-| `/ext/apps_data/nfc/plugins/` | NFC card-parser plugins (.fal) |
-| `/ext/apps_data/js_app/plugins/` | JS module bindings (.fal) |
-| `/ext/apps_data/doom/doom1.wad` | Doom |
-| `/ext/badusb/` | Bad USB scripts + `assets/layouts/*.kl` |
-| `/ext/infrared/assets/` | Universal remote DBs (`tv.ir`, `ac.ir`, `audio.ir`, `projectors.ir`, `fans.ir`, `leds.ir`) |
-| `/ext/lfrfid/assets/iso3166.lfrfid` | LF-RFID country code lookup |
-| `/ext/nfc/assets/` | MIFARE & EMV dictionaries |
-| `/ext/subghz/assets/` | SubGHz keystores + `dangerous_settings` |
-| `/ext/u2f/assets/` | U2F cert + key |
-| `/ext/wifi/<ssid>.txt` | Saved WiFi passwords |
-| `/ext/wifi/buddy_<name>_<ssid>.pcap` | Mesh/Buddy handshake captures |
-| `/ext/wifi/evil_portal/login_template/` | Custom captive-portal templates (no verify) |
-| `/ext/wifi/evil_portal/router_template/` | Custom captive-portal templates (with WLAN verify) |
+| Latest main-branch Flipper-port changes included | Yes |
+| Automatic Bruce clone/update and patching | Implemented |
+| Both firmware images built by one script | Implemented |
+| Flipper → Bruce switching code | Implemented |
+| Bruce → Flipper switching code | Implemented |
+| Flipper-side confirmation and visible errors | Implemented |
+| Dual Boot Info menu | Work in progress |
+| Current branch-tip build verification | Required |
+| Real-hardware dual-boot test | Not completed |
+| Recovery boot gesture | Not implemented |
+| Release-ready | No |
 
-A complete starter kit is in [`sdcard.zip`](sdcard.zip) — extract it onto a FAT32 SD.
+Do not treat this branch as guaranteed or production-ready until it has been built from a clean checkout and tested through several complete Flipper → Bruce → Flipper cycles on real hardware.
 
-## Building
+## What this branch adds
 
-### Prerequisites
+### One-command dual build
 
-- **[ESP-IDF v5.4.1](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32s3/get-started/)** (exact version required)
-- ESP-IDF export script sourced (default: `~/esp/esp-idf/export.sh`)
+`buildAndFlash_T-Embed.sh`:
 
-### Build & Flash (Linux / macOS)
+1. clones Bruce into `multi-boot/bruce` when missing
+2. resets and updates the Bruce checkout
+3. applies `tools/bruce_multiboot.patch`
+4. copies the shared 16 MB partition table into Bruce
+5. builds Bruce with PlatformIO
+6. builds the Flipper Zero ESP32 Port with ESP-IDF
+7. flashes the Flipper firmware to `ota_0`
+8. flashes Bruce to `ota_1`
+
+Bruce is built before the ESP-IDF environment is loaded so the PlatformIO and ESP-IDF Python environments do not interfere with each other.
+
+### Switching from the Flipper port
+
+Open the lock menu and select **Switch to Bruce**.
+
+The current implementation:
+
+- checks that `ota_1` contains a valid ESP application image
+- asks for confirmation before restarting
+- selects `ota_1` with `esp_ota_set_boot_partition()`
+- displays an error if Bruce is missing or the OTA selection fails
+- reboots into Bruce after a successful selection
+
+### Switching from Bruce
+
+The Bruce patch adds a **Flipper Zero** entry to Bruce’s main menu. Selecting it sets `ota_0` as the next boot partition and restarts the device.
+
+## Supported hardware
+
+### Dual boot target
+
+| Board | MCU | Flash | Display | Input | Main peripherals |
+|---|---|---:|---|---|---|
+| **LilyGo T-Embed CC1101** | ESP32-S3 | 16 MB | ST7789 320×170 | Rotary encoder + button | CC1101, PN532, IR, SD card |
+
+The dual-boot layout in this branch is designed specifically for the 16 MB T-Embed CC1101. Do not use the same partition table unchanged on boards with a different flash size or layout.
+
+### Other boards
+
+The underlying Flipper Zero ESP32 Port also supports additional ESP32 boards. Those boards are not targets of this dual-boot implementation and should continue using their board-specific single-firmware build scripts.
+
+## Flash layout
+
+`partitions_multiboot.csv` defines the layout shared by both firmware builds:
+
+| Partition | Offset | Size | Purpose |
+|---|---:|---:|---|
+| `nvs` | `0x9000` | `0x6000` | Non-volatile settings |
+| `otadata` | `0xF000` | `0x2000` | Selected OTA slot |
+| `phy_init` | `0x11000` | `0x1000` | Radio calibration data |
+| `ota_0` | `0x20000` | `0x500000` | Flipper Zero ESP32 Port |
+| `ota_1` | `0x520000` | `0x500000` | Bruce |
+| `spiffs` | `0xA20000` | `0x5C0000` | Bruce runtime storage |
+| `coredump` | `0xFE0000` | `0x20000` | Crash dump storage |
+
+During a complete dual-boot flash, the script erases `otadata` so the bootloader initially starts `ota_0`.
+
+## Prerequisites
+
+The current dual-boot script is intended for Linux or macOS.
+
+Required:
+
+- Git
+- Python 3
+- **ESP-IDF v5.4.1**
+- PlatformIO
+- several gigabytes of free space for toolchains and build output
+
+Expected ESP-IDF export script:
+
+```text
+~/esp/esp-idf/export.sh
+```
+
+Set `ESP_IDF_EXPORT_SCRIPT` when ESP-IDF is installed elsewhere.
+
+The build script searches for PlatformIO using:
+
+```text
+pio
+platformio
+~/.platformio/penv/bin/pio
+python3 -m platformio
+```
+
+## Clone and select the branch
 
 ```bash
-# T-Embed (auto-detects /dev/cu.usbmodem*)
-./buildAndFlash_T-Embed.sh
+git clone https://github.com/Pikalev15/T-Embed-dual-boot.git
+cd T-Embed-dual-boot
+git checkout restore-bruce-dual-boot
+```
 
-# Build only
+For an existing checkout:
+
+```bash
+cd ~/Projects/T-Embed-dual-boot
+git checkout restore-bruce-dual-boot
+git pull --ff-only
+```
+
+## Build without a board
+
+A connected T-Embed is not required for a build-only check:
+
+```bash
 ./buildAndFlash_T-Embed.sh --build-only
-
-# Waveshare ESP32-C6
-./buildAndFlash_waveshare_c6_1.47.sh
-./buildAndFlash_waveshare_c6_1.9.sh
 ```
 
-### Build & Flash (Windows)
+The expected ending is:
 
-Use `winbuild.py` — a single CLI that wraps build, flash and serial-monitor steps for `cmd.exe` / PowerShell. Requires Python 3 and ESP-IDF v5.4.1 installed at `C:\Espressif\frameworks\esp-idf-v5.4.1` (or override via `ESP_IDF_DIR`).
-
-```bat
-:: One-time: install ESP-IDF python env
-python winbuild.py setup
-
-:: Verify the toolchain activates
-python winbuild.py check
-
-:: Build T-Embed CC1101 (default board)
-python winbuild.py build
-
-:: Build Waveshare ESP32-C6
-python winbuild.py build --board waveshare_c6
-
-:: Flash (port defaults to %ESPPORT% or COM14)
-python winbuild.py flash --port COM14
-
-:: Stream serial output for N seconds
-python winbuild.py monitor --duration 30
-
-:: Build + flash + monitor in one go
-python winbuild.py all --port COM14
+```text
+Build complete (--build-only). Nothing flashed.
 ```
 
-Boards: `t_embed` (default), `esp32s3`, `waveshare_c6`. Override defaults with `ESP_IDF_DIR` and `ESPPORT` env vars. `monitor --reset` only works on USB-UART bridges, not on the ESP32-S3 native USB-Serial/JTAG — use `flash` or `all` to capture boot logs.
+A successful build confirms that the source compiles and that both application images fit their configured partitions. It does not confirm that the firmware behaves correctly on hardware.
 
-### Build a FAP
+## Build and flash
+
+After the board arrives and is connected:
 
 ```bash
-# Firmware must be built first (Linux/macOS)
-./buildFap.sh applications/main/my_app
+./buildAndFlash_T-Embed.sh
 ```
 
-## Porting Approach
+The script attempts to detect:
 
-This port preserves the original Flipper Zero architecture as closely as possible:
+```text
+/dev/ttyACM*
+/dev/cu.usbmodem*
+```
 
-- **Furi OS** runs on FreeRTOS with the same thread/mutex/event/record API
-- **Services** (GUI, Input, Storage, Loader, Desktop, BT) use the same message-queue and record-system patterns
-- **HAL** maps STM32 peripherals to ESP-IDF drivers (SPI → `esp_lcd`, I2C → CST816S/PN532, RMT → IR, Bluedroid → BLE, TinyUSB → USB-HID)
-- **Display** renders the original 128×64 mono framebuffer, then 2× upscales to RGB565 for the color LCD
-- **Applications** compile with minimal changes (`#include` path adjustments, no-op stubs for missing hardware like 1-Wire)
-- **`malloc` is redefined to `calloc`** — STM32 heap starts zeroed, ESP32 does not
-- **Crypto** is stubbed (no Flipper-Enclave key) — affects encrypted SubGHz keystores; everything else uses real mbedtls
+Specify the port manually when needed:
+
+```bash
+./buildAndFlash_T-Embed.sh --port /dev/ttyACM0
+```
+
+Build, flash, and open the serial monitor:
+
+```bash
+./buildAndFlash_T-Embed.sh --port /dev/ttyACM0 --monitor
+```
+
+Build or flash only the Flipper-port firmware without updating or flashing Bruce:
+
+```bash
+./buildAndFlash_T-Embed.sh --skip-bruce
+```
+
+Show all options:
+
+```bash
+./buildAndFlash_T-Embed.sh --help
+```
+
+> [!IMPORTANT]
+> The browser flasher has not been validated for this experimental dual-boot branch. Use the repository script until a branch-specific flash sequence has been tested.
+
+## First hardware test plan
+
+After the board arrives:
+
+1. flash the complete dual-boot image
+2. confirm that the device initially boots the Flipper port
+3. confirm that the display and rotary input work
+4. open the lock menu
+5. choose **Switch to Bruce**
+6. confirm the restart dialog
+7. verify that Bruce boots and accepts input
+8. choose **Flipper Zero** inside Bruce
+9. verify that the Flipper port boots again
+10. repeat the cycle several times
+11. test SD-card access from both firmware images
+12. test power-off, reset, and deep sleep
+
+Capture serial logs for any boot loop, crash, blank screen, or failed OTA switch.
+
+## Recovery and risk
+
+There is currently no hold-button recovery selector or automatic crash fallback. A broken firmware image may require putting the ESP32-S3 into download mode and reflashing it over USB.
+
+Before a public release, the project should add:
+
+- a boot-time recovery gesture that forces `ota_0`
+- repeated-boot-failure detection
+- automated clean builds for both firmware projects
+- binary-size checks against both OTA partition limits
+- tested release binaries with documented flash offsets
+
+## Flipper-port overview
+
+The Flipper Zero ESP32 Port included in this repository provides a broad collection of hardware-control, storage, connectivity, scripting, utility, and game applications. Availability depends on the board and attached peripherals.
+
+Main areas include:
+
+- Sub-GHz tools through the onboard CC1101
+- infrared learning and remote control
+- Wi-Fi and Bluetooth diagnostics and research tools
+- NFC support through PN532
+- SD-card archive and file management
+- USB mass-storage and desktop connectivity
+- JavaScript applications and plugins
+- system settings, power controls, clock, and device information
+- games including Doom, Snake, and Roulette
+
+Use radio, networking, NFC, USB, and automation features only on devices and systems you own or have explicit permission to test.
+
+## SD card
+
+Many applications require assets on a FAT32-formatted SD card. A starter package is included as `sdcard.zip`.
+
+Common paths include:
+
+| Path | Purpose |
+|---|---|
+| `/ext/Manifest` | Asset-pack presence check |
+| `/ext/dolphin/` | Desktop animations |
+| `/ext/apps_assets/nfc/plugins/` | NFC protocol plugins |
+| `/ext/apps_data/nfc/plugins/` | NFC card-parser plugins |
+| `/ext/apps_data/js_app/plugins/` | JavaScript module bindings |
+| `/ext/apps_data/doom/doom1.wad` | Doom data file |
+| `/ext/badusb/` | User automation scripts and keyboard layouts |
+| `/ext/infrared/assets/` | Universal remote databases |
+| `/ext/nfc/assets/` | NFC assets |
+| `/ext/subghz/assets/` | Sub-GHz assets |
+| `/ext/wifi/` | Saved network data and captures |
+
+## Important project files
+
+| File | Purpose |
+|---|---|
+| `buildAndFlash_T-Embed.sh` | Build and flash both firmware images |
+| `patchBruce.py` | Clone, update, reset, and patch Bruce |
+| `tools/bruce_multiboot.patch` | Add the return-to-Flipper menu item to Bruce |
+| `partitions_multiboot.csv` | Shared 16 MB dual-boot layout |
+| `sdkconfig.defaults.esp32s3` | ESP32-S3 build defaults |
+| `interface.html` | Browser flasher UI; dual-boot flow not yet validated |
+| `multi-boot/bruce/` | Local Bruce checkout generated during the build |
+
+## Updating Bruce
+
+`patchBruce.py` is designed to be safe to run before each build. It:
+
+- resets the local Bruce checkout
+- attempts a fast-forward update
+- reapplies the dual-boot patch
+- copies the shared partition table
+
+If upstream Bruce changes the affected menu code, patching exits with an error instead of silently producing a build without the return-to-Flipper entry. Update `tools/bruce_multiboot.patch` before continuing.
+
+## Known limitations
+
+- real-device switching has not yet been verified on this branch
+- the current branch tip still needs a fresh build-only verification
+- the Dual Boot Info menu entry is unfinished
+- there is no boot-time recovery selector
+- there is no automatic rollback after repeated boot failures
+- upstream changes can break the Bruce patch or firmware compatibility
+- features depending on external hardware, board-specific pins, or SD assets require separate testing
+- encrypted manufacturer Sub-GHz keystores that depend on unavailable Flipper enclave keys are not supported
+
+## MVP completion checklist
+
+The MVP is complete only after:
+
+- both firmware projects build from a clean checkout
+- both images flash at the intended offsets
+- both firmware images boot on the T-Embed CC1101
+- switching works in both directions
+- confirmation and error dialogs work on-device
+- SD-card data remains accessible
+- power-off and deep sleep still work
+- a practical recovery path is documented and tested
+
+Later improvements can include a boot selector, forced-recovery gesture, crash counter, separate firmware updates, branch-specific web flashing, release packaging, and automated builds.
+
+## Credits
+
+- [Sor3nt/Flipper-Zero-ESP32-Port](https://github.com/Sor3nt/Flipper-Zero-ESP32-Port)
+- [BruceDevices/firmware](https://github.com/BruceDevices/firmware)
+- the Flipper Zero firmware contributors
+- contributors to the ESP32 board ports and applications included in this repository
+
+## Community
+
+- [Flipper Zero meets ESP32 Discord](https://discord.gg/5DnAqFXaBC)
+
+## Disclaimer
+
+This project is provided for education, research, interoperability, and authorised testing. You are responsible for complying with local laws and for using its hardware and connectivity features only on devices and systems you own or have explicit permission to test. The contributors are not responsible for damaged hardware, lost data, service disruption, or unlawful use.
