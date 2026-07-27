@@ -5,15 +5,15 @@
 #include "../desktop_i.h"
 #include "desktop_view_lock_menu.h"
 
-#define LOCK_MENU_MAX_ITEMS 6
+#define LOCK_MENU_MAX_ITEMS 7
 
 // Menu items and events are built dynamically from the current toggle states:
-//   qFlipper       Enable/Disable (background RPC bridge)   [USB-OTG only]
-//   USB-Storage    open the full-screen mass-storage scene  [USB-OTG only]
-//   Bluetooth      Enable/Disable
-//   Switch to Bruce  reboot into the Bruce firmware         [multi-boot only]
-//   Mesh: Off/Master/Client    cycle the mesh role
-//   Mesh Clients   open the discovery/pairing scene          [Master only]
+//   qFlipper         Enable/Disable (background RPC bridge)   [USB-OTG only]
+//   USB-Storage      open the full-screen mass-storage scene  [USB-OTG only]
+//   Bluetooth        Enable/Disable
+//   Switch to Bruce  reboot into the Bruce firmware           [multi-boot only]
+//   Dual Boot Info   show the active slot and installed images
+//   Mesh Clients     open the discovery/pairing scene
 
 typedef struct {
     const char* label;
@@ -56,6 +56,9 @@ static void lock_menu_build_items(
     if(bruce_available) {
         s_items[s_item_count++] = (LockMenuItem){"Switch to Bruce", DesktopLockMenuEventBruce};
     }
+
+    s_items[s_item_count++] =
+        (LockMenuItem){"Dual Boot Info", DesktopLockMenuEventDualBootInfo};
 
     /* Mesh: der T-Embed ist immer Master — kein Mode-Toggle, "Mesh Clients"
      * (Discovery/Pair) ist immer verfügbar. */
