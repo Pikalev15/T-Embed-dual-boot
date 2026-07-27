@@ -89,7 +89,7 @@ new file mode 100644
 index 00000000..f98b5430
 --- /dev/null
 +++ b/src/core/menu_items/FlipperOsMenu.h
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,24 @@
 +// --- Multi-boot add-on (not part of upstream Bruce) ---------------------------
 +// Provides the "Flipper Zero" main-menu entry that reboots the device into the
 +// ESP32 Flipper Zero port living in the ota_0 partition. Mirrors the "Bruce"
@@ -107,7 +107,10 @@ index 00000000..f98b5430
 +    void optionsMenu(void);
 +    void drawIcon(float scale);
 +    bool hasTheme() { return false; }
-+    String themePath() { return ""; }
++    const String& themePath() {
++        static const String empty;
++        return empty;
++    }
 +};
 +
 +#endif // __FLIPPEROS_MENU_H__
