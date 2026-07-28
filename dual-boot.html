@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080808">
+  <link rel="icon" href="favicon.ico">
+  <title>T-Embed Dual-Boot Flasher</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080808;
+      --panel: #121212;
+      --panel-2: #191919;
+      --border: #2b2b2b;
+      --text: #efefef;
+      --muted: #989898;
+      --orange: #ff8c00;
+      --orange-2: #ffb347;
+      --green: #32d26f;
+      --red: #ff6262;
+      --yellow: #ffc857;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(255, 140, 0, 0.12), transparent 38rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(760px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 6vw, 3.4rem);
+      letter-spacing: -0.04em;
+    }
+
+    h1 span { color: var(--orange); }
+
+    .subtitle {
+      margin: 10px 0 30px;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .card {
+      background: color-mix(in srgb, var(--panel) 94%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+      margin-top: 16px;
+    }
+
+    .warning {
+      border-color: rgba(255, 200, 87, 0.42);
+      background: rgba(255, 200, 87, 0.07);
+      color: #ffe7ad;
+      line-height: 1.55;
+    }
+
+    .warning strong { color: var(--yellow); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .stat {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-value {
+      margin-top: 5px;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+
+    .layout {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 0.9rem;
+    }
+
+    .layout th,
+    .layout td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .layout th {
+      color: var(--muted);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    code {
+      color: #ffd39b;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 14px;
+      padding: 14px 20px;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+    }
+
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:disabled { opacity: 0.42; cursor: not-allowed; }
+
+    .primary {
+      background: var(--orange);
+      color: #080808;
+      flex: 1 1 220px;
+    }
+
+    .secondary {
+      background: #292929;
+      color: var(--text);
+      border: 1px solid #383838;
+    }
+
+    .progress-shell {
+      height: 18px;
+      overflow: hidden;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #050505;
+      margin-top: 20px;
+    }
+
+    .progress {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--orange), var(--orange-2));
+      transition: width 120ms linear;
+    }
+
+    #status {
+      min-height: 1.5em;
+      margin: 12px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    #status.error { color: var(--red); }
+    #status.success { color: var(--green); }
+
+    details { margin-top: 16px; }
+    summary { cursor: pointer; color: var(--muted); }
+
+    #log {
+      max-height: 220px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #050505;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+      color: #bdbdbd;
+      font: 0.76rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .footer {
+      color: #666;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      margin-top: 24px;
+      text-align: center;
+    }
+
+    @media (max-width: 560px) {
+      main { padding-top: 28px; }
+      .card { padding: 17px; border-radius: 16px; }
+      .grid { grid-template-columns: 1fr; }
+      .layout { font-size: 0.8rem; }
+      .layout th, .layout td { padding: 9px 4px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>T-Embed <span>Dual Boot</span></h1>
+    <p class="subtitle">
+      Install the Flipper Zero ESP32 Port and Bruce together on a 16 MB
+      LilyGo T-Embed CC1101 using Chrome or Edge on desktop.
+    </p>
+
+    <section class="card warning">
+      <strong>Experimental and not hardware-validated yet.</strong>
+      This full installation erases the T-Embed's internal flash, including its
+      current firmware and saved internal settings. The SD card is not erased.
+      Do not disconnect USB while flashing.
+    </section>
+
+    <section class="card">
+      <div class="grid">
+        <div class="stat">
+          <div class="stat-label">Target</div>
+          <div class="stat-value">LilyGo T-Embed CC1101</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Chip / flash</div>
+          <div class="stat-value">ESP32-S3 / 16 MB</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Bundle commit</div>
+          <div class="stat-value" id="commit">Loading…</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Generated</div>
+          <div class="stat-value" id="generated">Loading…</div>
+        </div>
+      </div>
+
+      <table class="layout" aria-label="Firmware flash layout">
+        <thead>
+          <tr>
+            <th>Part</th>
+            <th>Offset</th>
+            <th>Size</th>
+          </tr>
+        </thead>
+        <tbody id="parts">
+          <tr><td colspan="3">Loading firmware manifest…</td></tr>
+        </tbody>
+      </table>
+
+      <div class="actions">
+        <button class="primary" id="flash" disabled>Connect and flash</button>
+        <button class="secondary" id="retry" type="button">Reload bundle</button>
+      </div>
+
+      <div class="progress-shell" aria-label="Flash progress">
+        <div class="progress" id="progress"></div>
+      </div>
+      <p id="status">Checking browser and firmware bundle…</p>
+
+      <details>
+        <summary>Technical log</summary>
+        <pre id="log"></pre>
+      </details>
+    </section>
+
+    <p class="footer">
+      First boot defaults to the Flipper port in <code>ota_0</code>. Bruce is
+      installed in <code>ota_1</code>. Use only on hardware you own and test the
+      switching flow before relying on the device.
+    </p>
+  </main>
+
+  <script type="module">
+    import { ESPLoader, Transport } from 'https://unpkg.com/esptool-js@0.5.4/bundle.js';
+
+    const MANIFEST_URL = 'firmware/t-embed-dual/latest/manifest.json';
+    const FIRMWARE_BASE = 'firmware/t-embed-dual/latest/';
+
+    const flashButton = document.getElementById('flash');
+    const retryButton = document.getElementById('retry');
+    const statusElement = document.getElementById('status');
+    const progressElement = document.getElementById('progress');
+    const partsElement = document.getElementById('parts');
+    const commitElement = document.getElementById('commit');
+    const generatedElement = document.getElementById('generated');
+    const logElement = document.getElementById('log');
+
+    let manifest = null;
+    let busy = false;
+
+    const terminal = {
+      clean() {
+        logElement.textContent = '';
+      },
+      write(data) {
+        appendLog(String(data));
+      },
+      writeLine(data) {
+        appendLog(String(data) + '\n');
+      },
+    };
+
+    function appendLog(text) {
+      logElement.textContent += text;
+      logElement.scrollTop = logElement.scrollHeight;
+    }
+
+    function setStatus(message, kind = '') {
+      statusElement.textContent = message;
+      statusElement.className = kind;
+    }
+
+    function setProgress(percent) {
+      const safe = Math.max(0, Math.min(100, Number(percent) || 0));
+      progressElement.style.width = `${safe}%`;
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+    }
+
+    function shortCommit(value) {
+      if (!value || value === 'unknown') return 'unknown';
+      return value.slice(0, 12);
+    }
+
+    function binaryToString(bytes) {
+      const chunkSize = 0x8000;
+      let output = '';
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        output += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      return output;
+    }
+
+    async function digestHex(buffer) {
+      const digest = await crypto.subtle.digest('SHA-256', buffer);
+      return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function renderManifest() {
+      commitElement.textContent = shortCommit(manifest.commit);
+      generatedElement.textContent = manifest.generated_at
+        ? new Date(manifest.generated_at).toLocaleString()
+        : 'unknown';
+
+      partsElement.innerHTML = '';
+      for (const part of manifest.parts) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${part.name}</td>
+          <td><code>${part.offset_hex}</code></td>
+          <td>${formatBytes(part.size)}</td>
+        `;
+        partsElement.appendChild(row);
+      }
+    }
+
+    async function loadManifest() {
+      manifest = null;
+      flashButton.disabled = true;
+      setProgress(0);
+
+      if (!window.isSecureContext) {
+        setStatus('Open this page over HTTPS or localhost. Web Serial requires a secure context.', 'error');
+        return;
+      }
+
+      if (!('serial' in navigator)) {
+        setStatus('Web Serial is unavailable. Use Chrome or Edge on desktop.', 'error');
+        return;
+      }
+
+      try {
+        setStatus('Loading firmware manifest…');
+        const response = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`manifest request returned HTTP ${response.status}`);
+
+        const value = await response.json();
+        if (!value || !Array.isArray(value.parts) || value.parts.length !== 4) {
+          throw new Error('manifest does not contain the four required flash parts');
+        }
+        if (value.chip !== 'ESP32-S3' || value.flash_size !== '16MB') {
+          throw new Error('manifest target does not match the T-Embed ESP32-S3 16 MB layout');
+        }
+
+        manifest = value;
+        renderManifest();
+        flashButton.disabled = false;
+        setStatus('Bundle ready. Connect the T-Embed by USB, then click Connect and flash.');
+      } catch (error) {
+        console.error(error);
+        setStatus(`Firmware bundle unavailable: ${error.message}`, 'error');
+        appendLog(`Manifest error: ${error.stack || error}\n`);
+      }
+    }
+
+    async function fetchParts() {
+      const loaded = [];
+      let loadedBytes = 0;
+      const expectedTotal = manifest.parts.reduce((sum, part) => sum + part.size, 0);
+
+      for (const part of manifest.parts) {
+        setStatus(`Loading and verifying ${part.name}…`);
+        const response = await fetch(`${FIRMWARE_BASE}${part.file}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`${part.file} returned HTTP ${response.status}`);
+
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength !== part.size) {
+          throw new Error(`${part.file} size mismatch: expected ${part.size}, received ${buffer.byteLength}`);
+        }
+
+        const actualHash = await digestHex(buffer);
+        if (actualHash.toLowerCase() !== String(part.sha256).toLowerCase()) {
+          throw new Error(`${part.file} SHA-256 mismatch`);
+        }
+
+        loaded.push({
+          data: binaryToString(new Uint8Array(buffer)),
+          address: part.offset,
+          size: buffer.byteLength,
+          name: part.name,
+        });
+        loadedBytes += buffer.byteLength;
+        setProgress((loadedBytes / expectedTotal) * 12);
+      }
+
+      return loaded;
+    }
+
+    async function resetDevice(transport) {
+      try {
+        await transport.setDTR(false);
+        await transport.setRTS(true);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await transport.setRTS(false);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        appendLog(`Reset warning: ${error.message}\n`);
+      }
+    }
+
+    async function flashFirmware() {
+      if (busy || !manifest) return;
+
+      const accepted = window.confirm(
+        'This will erase all internal flash on the connected device and install both firmwares. The SD card is not erased. Continue?'
+      );
+      if (!accepted) return;
+
+      busy = true;
+      flashButton.disabled = true;
+      retryButton.disabled = true;
+      terminal.clean();
+      setProgress(0);
+
+      let port = null;
+      let transport = null;
+
+      try {
+        setStatus('Choose the T-Embed serial device…');
+        port = await navigator.serial.requestPort();
+        transport = new Transport(port, true);
+
+        const loader = new ESPLoader({
+          transport,
+          baudrate: 460800,
+          romBaudrate: 115200,
+          terminal,
+        });
+
+        setStatus('Connecting to the ESP32-S3 bootloader…');
+        await loader.main();
+        await loader.flashId();
+
+        const files = await fetchParts();
+        const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+        const bytesBeforePart = [];
+        let running = 0;
+        for (const file of files) {
+          bytesBeforePart.push(running);
+          running += file.size;
+        }
+
+        setStatus('Erasing internal flash and writing the dual-boot image…');
+        await loader.writeFlash({
+          fileArray: files.map(file => ({ data: file.data, address: file.address })),
+          flashSize: manifest.flash_size,
+          flashMode: manifest.flash_mode || 'dio',
+          flashFreq: manifest.flash_frequency || '80m',
+          eraseAll: true,
+          compress: true,
+          reportProgress: (fileIndex, written, fileTotal) => {
+            const effectiveTotal = fileTotal || files[fileIndex].size;
+            const scaledWritten = Math.min(written, effectiveTotal);
+            const globalWritten = bytesBeforePart[fileIndex] + scaledWritten;
+            const percent = 12 + (globalWritten / totalBytes) * 86;
+            setProgress(percent);
+            setStatus(
+              `Writing ${files[fileIndex].name} (${fileIndex + 1}/${files.length}) — ` +
+              `${Math.round((scaledWritten / effectiveTotal) * 100)}%`
+            );
+          },
+        });
+
+        setStatus('Resetting the T-Embed…');
+        setProgress(99);
+        await resetDevice(transport);
+        setProgress(100);
+        setStatus('Flash complete. The device should boot the Flipper port from ota_0.', 'success');
+      } catch (error) {
+        console.error(error);
+        appendLog(`\nERROR: ${error.stack || error}\n`);
+        setStatus(`Flash failed: ${error.message}`, 'error');
+      } finally {
+        if (transport) {
+          try { await transport.disconnect(); } catch (error) { appendLog(`Disconnect warning: ${error.message}\n`); }
+        }
+        busy = false;
+        retryButton.disabled = false;
+        flashButton.disabled = !manifest;
+      }
+    }
+
+    flashButton.addEventListener('click', flashFirmware);
+    retryButton.addEventListener('click', loadManifest);
+    loadManifest();
+  </script>
+</body>
+</html>
