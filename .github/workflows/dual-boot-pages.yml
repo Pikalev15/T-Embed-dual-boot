@@ -1,0 +1,147 @@
+name: Build and Deploy T-Embed Dual-Boot Flasher
+
+on:
+  push:
+    branches:
+      - restore-bruce-dual-boot
+    paths:
+      - ".github/workflows/dual-boot-pages.yml"
+      - "dual-boot.html"
+      - "tools/prepare_webflash.py"
+      - "tools/bruce_multiboot.patch"
+      - "patchBruce.py"
+      - "buildAndFlash_T-Embed.sh"
+      - "partitions_multiboot.csv"
+      - "sdkconfig"
+      - "sdkconfig.defaults.esp32s3"
+      - "applications/**"
+      - "applications_user/**"
+      - "components/**"
+      - "main/**"
+      - "CMakeLists.txt"
+      - "dependencies.lock"
+      - "idf_component.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: t-embed-dual-boot-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build both firmwares and package site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git wget flex bison gperf python3 python3-pip python3-venv \
+            cmake ninja-build ccache libffi-dev libssl-dev dfu-util \
+            libusb-1.0-0 libglib2.0-dev
+
+      - name: Cache ESP-IDF source
+        id: idf-source-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/esp/esp-idf
+          key: esp-idf-source-v5.4.1
+
+      - name: Clone ESP-IDF v5.4.1
+        if: steps.idf-source-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/esp
+          git clone --branch v5.4.1 --depth 1 \
+            https://github.com/espressif/esp-idf.git ~/esp/esp-idf
+
+      - name: Cache ESP-IDF tools
+        id: idf-tools-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.espressif
+          key: esp-idf-tools-v5.4.1-esp32s3
+
+      - name: Install ESP-IDF tools
+        if: steps.idf-tools-cache.outputs.cache-hit != 'true'
+        run: ~/esp/esp-idf/install.sh esp32s3
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-t-embed-bruce-${{ runner.os }}
+          restore-keys: |
+            platformio-t-embed-bruce-
+
+      - name: Install PlatformIO
+        run: |
+          python3 -m venv "$HOME/.platformio-ci"
+          "$HOME/.platformio-ci/bin/python" -m pip install --upgrade pip
+          "$HOME/.platformio-ci/bin/python" -m pip install platformio
+          echo "$HOME/.platformio-ci/bin" >> "$GITHUB_PATH"
+
+      - name: Verify toolchains
+        run: |
+          export PATH="$HOME/.platformio-ci/bin:$PATH"
+          source ~/esp/esp-idf/export.sh
+          idf.py --version
+          pio --version
+
+      - name: Build Flipper port and Bruce
+        env:
+          ESP_IDF_EXPORT_SCRIPT: /home/runner/esp/esp-idf/export.sh
+        run: |
+          export PATH="$HOME/.platformio-ci/bin:$PATH"
+          chmod +x ./buildAndFlash_T-Embed.sh
+          ./buildAndFlash_T-Embed.sh --build-only
+
+      - name: Prepare browser-flasher site
+        run: |
+          python3 tools/prepare_webflash.py --output _site
+          python3 -m json.tool \
+            _site/firmware/t-embed-dual/latest/manifest.json >/dev/null
+          test -s _site/index.html
+          test -s _site/firmware/t-embed-dual/latest/bootloader.bin
+          test -s _site/firmware/t-embed-dual/latest/partition-table.bin
+          test -s _site/firmware/t-embed-dual/latest/flipper.bin
+          test -s _site/firmware/t-embed-dual/latest/bruce.bin
+          find _site -maxdepth 5 -type f -printf '%p %s bytes\n' | sort
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload downloadable build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: t-embed-dual-boot-webflash
+          path: _site/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site/
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy browser flasher
+        id: deployment
+        uses: actions/deploy-pages@v4
