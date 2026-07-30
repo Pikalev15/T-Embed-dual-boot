@@ -24,12 +24,12 @@ This README describes the `restore-bruce-dual-boot` branch.
 | Area | Status |
 |---|---|
 | Latest main-branch Flipper-port changes included | Yes |
-| Automatic Bruce clone/update and patching | Implemented |
+| Reproducible pinned Bruce checkout and patching | Implemented |
 | Both firmware images built by one script | Implemented |
 | Flipper → Bruce switching code | Implemented |
 | Bruce → Flipper switching code | Implemented |
 | Flipper-side confirmation and visible errors | Implemented |
-| Dual Boot Info menu | Work in progress |
+| Dual Boot Info menu | Implemented |
 | Current branch-tip build verification | Required |
 | Real-hardware dual-boot test | Not completed |
 | Recovery boot gesture | Not implemented |
@@ -44,7 +44,7 @@ Do not treat this branch as guaranteed or production-ready until it has been bui
 `buildAndFlash_T-Embed.sh`:
 
 1. clones Bruce into `multi-boot/bruce` when missing
-2. resets and updates the Bruce checkout
+2. checks out the pinned, verified Bruce revision
 3. applies `tools/bruce_multiboot.patch`
 4. copies the shared 16 MB partition table into Bruce
 5. builds Bruce with PlatformIO
@@ -160,6 +160,12 @@ Build complete (--build-only). Nothing flashed.
 ```
 
 A successful build confirms that the source compiles and that both application images fit their configured partitions. It does not confirm that the firmware behaves correctly on hardware.
+
+Run the host-side capture-buffer regression test separately with:
+
+```bash
+./tests/run_host_tests.sh
+```
 
 ## Build and flash
 
@@ -277,32 +283,34 @@ Common paths include:
 | File | Purpose |
 |---|---|
 | `buildAndFlash_T-Embed.sh` | Build and flash both firmware images |
-| `patchBruce.py` | Clone, update, reset, and patch Bruce |
+| `patchBruce.py` | Clone, pin, reset, and patch Bruce reproducibly |
 | `tools/bruce_multiboot.patch` | Add the return-to-Flipper menu item to Bruce |
 | `partitions_multiboot.csv` | Shared 16 MB dual-boot layout |
 | `sdkconfig.defaults.esp32s3` | ESP32-S3 build defaults |
-| `interface.html` | Browser flasher UI; dual-boot flow not yet validated |
+| `dual-boot.html` | Browser flasher UI; dual-boot flow not yet validated |
 | `multi-boot/bruce/` | Local Bruce checkout generated during the build |
 
-## Updating Bruce
+## Updating the pinned Bruce revision
 
 `patchBruce.py` is designed to be safe to run before each build. It:
 
+- checks out the exact `BRUCE_REVISION` declared in the script
 - resets the local Bruce checkout
-- attempts a fast-forward update
 - reapplies the dual-boot patch
 - copies the shared partition table
 
-If upstream Bruce changes the affected menu code, patching exits with an error instead of silently producing a build without the return-to-Flipper entry. Update `tools/bruce_multiboot.patch` before continuing.
+To upgrade Bruce intentionally, test the desired upstream revision with
+`lilygo-t-embed-cc1101`, update `BRUCE_REVISION`, regenerate the patch if
+required, and rebuild both images. Patching exits with an error rather than
+silently producing a build without the return-to-Flipper entry.
 
 ## Known limitations
 
 - real-device switching has not yet been verified on this branch
 - the current branch tip still needs a fresh build-only verification
-- the Dual Boot Info menu entry is unfinished
 - there is no boot-time recovery selector
 - there is no automatic rollback after repeated boot failures
-- upstream changes can break the Bruce patch or firmware compatibility
+- upgrading the pinned Bruce revision requires a compatibility test
 - features depending on external hardware, board-specific pins, or SD assets require separate testing
 - encrypted manufacturer Sub-GHz keystores that depend on unavailable Flipper enclave keys are not supported
 

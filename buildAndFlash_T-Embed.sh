@@ -82,7 +82,7 @@ Usage: $(basename "$0") [--port <device>] [--monitor] [--build-only] [--skip-bru
 Builds and flashes the multi-boot image for the LilyGo T-Embed CC1101:
   ota_0 = this ESP32 Flipper Zero port      ota_1 = Bruce firmware
 
-It runs patchBruce.py (clone/pull + patch the bundled Bruce checkout), builds
+It runs patchBruce.py (checkout pinned revision + patch the Bruce checkout), builds
 Bruce with PlatformIO, builds this firmware with ESP-IDF, then flashes both.
 
 Options:
@@ -155,12 +155,12 @@ fi
 cd "${ESP32_DIR}"
 
 # ---------------------------------------------------------------------------
-# 1) Bruce: update the bundled checkout, patch it, build it with PlatformIO.
+# 1) Bruce: select the pinned revision, patch it, build it with PlatformIO.
 #    Done before sourcing ESP-IDF's export.sh so the two toolchains don't mix.
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_BRUCE}" -eq 0 ]]; then
     echo
-    echo "=== Updating + patching Bruce ==="
+    echo "=== Preparing pinned + patched Bruce ==="
     python3 "${PATCH_BRUCE}"
 
     PIO_BIN="$(find_pio || true)"

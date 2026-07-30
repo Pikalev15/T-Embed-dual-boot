@@ -67,14 +67,14 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def git_revision() -> str:
-    env_sha = os.environ.get("GITHUB_SHA")
+def git_revision(repo: Path = REPO_ROOT, environment_variable: str | None = "GITHUB_SHA") -> str:
+    env_sha = os.environ.get(environment_variable) if environment_variable else None
     if env_sha:
         return env_sha
 
     try:
         return subprocess.check_output(
-            ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
@@ -161,6 +161,7 @@ def build_site(output: Path) -> None:
         "ota_1": "Bruce",
         "generated_at": generated_at,
         "commit": git_revision(),
+        "bruce_commit": git_revision(REPO_ROOT / "multi-boot/bruce", None),
         "total_binary_bytes": total_size,
         "parts": manifest_parts,
     }

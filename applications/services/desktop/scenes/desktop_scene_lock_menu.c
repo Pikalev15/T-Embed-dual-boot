@@ -7,6 +7,8 @@
 #include <esp_partition.h>
 #include <esp_ota_ops.h>
 
+#include <stdio.h>
+
 #include "../desktop_i.h"
 #include "../views/desktop_view_lock_menu.h"
 #include "../helpers/qflipper_bridge.h"
@@ -59,12 +61,13 @@ static bool desktop_lock_menu_confirm_switch_to_bruce(void) {
     return result == DialogMessageButtonRight;
 }
 
-/* Return ota_1 only when it contains a valid ESP application image. Merely
- * finding the partition is not enough: a blank ota_1 would otherwise expose
- * the menu item and could leave the device trying to boot empty flash. */
-static const esp_partition_t* desktop_lock_menu_find_bruce_partition(void) {
+/* Return an OTA slot only when it contains a valid ESP application image.
+ * Merely finding the partition is not enough: a blank slot must not be
+ * presented as an installed firmware. */
+static const esp_partition_t* desktop_lock_menu_find_valid_ota(
+    esp_partition_subtype_t subtype) {
     const esp_partition_t* partition = esp_partition_find_first(
-        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+        ESP_PARTITION_TYPE_APP, subtype, NULL);
     if(partition == NULL) return NULL;
 
     esp_app_desc_t app_desc;
@@ -73,9 +76,39 @@ static const esp_partition_t* desktop_lock_menu_find_bruce_partition(void) {
     return partition;
 }
 
+static const esp_partition_t* desktop_lock_menu_find_bruce_partition(void) {
+    return desktop_lock_menu_find_valid_ota(ESP_PARTITION_SUBTYPE_APP_OTA_1);
+}
+
 /* "Switch to Bruce" only makes sense when a valid second OTA firmware exists. */
 static bool desktop_lock_menu_bruce_available(void) {
     return desktop_lock_menu_find_bruce_partition() != NULL;
+}
+
+static void desktop_lock_menu_show_dual_boot_info(void) {
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const char* active = "Unknown";
+    if(running != NULL) {
+        if(running->subtype == ESP_PARTITION_SUBTYPE_APP_OTA_0) {
+            active = "Flipper";
+        } else if(running->subtype == ESP_PARTITION_SUBTYPE_APP_OTA_1) {
+            active = "Bruce";
+        }
+    }
+
+    const bool flipper_valid =
+        desktop_lock_menu_find_valid_ota(ESP_PARTITION_SUBTYPE_APP_OTA_0) != NULL;
+    const bool bruce_valid = desktop_lock_menu_bruce_available();
+
+    char text[96];
+    snprintf(
+        text,
+        sizeof(text),
+        "Active: %s\nota_0: %s\nota_1: %s",
+        active,
+        flipper_valid ? "installed" : "missing",
+        bruce_valid ? "installed" : "missing");
+    desktop_lock_menu_show_message("Dual Boot Info", text, "OK");
 }
 
 /* Point the OTA boot slot at the Bruce firmware (ota_1) and reboot into it.
@@ -174,6 +207,11 @@ bool desktop_scene_lock_menu_on_event(void* context, SceneManagerEvent event) {
             if(desktop_lock_menu_confirm_switch_to_bruce()) {
                 desktop_lock_menu_switch_to_bruce(); /* reboots; returns only on error */
             }
+            consumed = true;
+            break;
+
+        case DesktopLockMenuEventDualBootInfo:
+            desktop_lock_menu_show_dual_boot_info();
             consumed = true;
             break;
 

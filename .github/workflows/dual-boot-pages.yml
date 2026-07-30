@@ -4,23 +4,6 @@ on:
   push:
     branches:
       - restore-bruce-dual-boot
-    paths:
-      - ".github/workflows/dual-boot-pages.yml"
-      - "dual-boot.html"
-      - "tools/prepare_webflash.py"
-      - "tools/bruce_multiboot.patch"
-      - "patchBruce.py"
-      - "buildAndFlash_T-Embed.sh"
-      - "partitions_multiboot.csv"
-      - "sdkconfig"
-      - "sdkconfig.defaults.esp32s3"
-      - "applications/**"
-      - "applications_user/**"
-      - "components/**"
-      - "main/**"
-      - "CMakeLists.txt"
-      - "dependencies.lock"
-      - "idf_component.yml"
   workflow_dispatch:
 
 permissions:
@@ -41,6 +24,9 @@ jobs:
     steps:
       - name: Checkout branch
         uses: actions/checkout@v6
+
+      - name: Run host unit tests
+        run: ./tests/run_host_tests.sh
 
       - name: Install system dependencies
         run: |

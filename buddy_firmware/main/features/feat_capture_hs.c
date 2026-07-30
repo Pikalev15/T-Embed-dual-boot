@@ -32,6 +32,7 @@
 #include "buddy_hs_store.h"
 #include "buddy_node.h"
 #include "buddy_protocol.h"
+#include "capture_buffer.h"
 
 #define FEAT_ID 2
 #define TAG     "feat-hs"
@@ -99,9 +100,10 @@ static void rx_cb(void* buf, wifi_promiscuous_pkt_type_t type) {
     uint32_t next = (s_wr + 1) % CAP_POOL;
     if(next == s_rd) return; /* full — drop */
     CapPkt* slot = &s_pool[s_wr];
-    if((size_t)len > sizeof(slot->data)) return; /* explicit bound check on attacker-controlled len */
-    memcpy(slot->data, payload, len);
-    slot->len = (uint16_t)len;
+    if(!capture_buffer_store(
+           slot->data, sizeof(slot->data), &slot->len, payload, (uint16_t)len)) {
+        return;
+    }
     s_wr = next;
 }
 
