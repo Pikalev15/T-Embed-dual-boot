@@ -17,7 +17,8 @@ jobs:
           submodules: recursive
       - name: Create source archive
         run: |
-          tar --exclude=.git --exclude=.pio --exclude=build_t_embed -czf source-snapshot.tar.gz .
+          tar --exclude=.git --exclude=.pio --exclude=build_t_embed -czf /tmp/source-snapshot.tar.gz .
+          mv /tmp/source-snapshot.tar.gz source-snapshot.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: source-snapshot
