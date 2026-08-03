@@ -104,6 +104,10 @@ static WlanApp* wlan_app_alloc(void) {
     view_set_context(app->view_sd_update, app->view_dispatcher);
     view_dispatcher_add_view(app->view_dispatcher, WlanAppViewSdUpdate, app->view_sd_update);
 
+    app->view_firmware_update = wlan_firmware_update_view_alloc();
+    view_set_context(app->view_firmware_update, app->view_dispatcher);
+    view_dispatcher_add_view(
+        app->view_dispatcher, WlanAppViewFirmwareUpdate, app->view_firmware_update);
 
     app->ap_records = malloc(sizeof(WlanApRecord) * WLAN_APP_MAX_APS);
     app->ap_count = 0;
@@ -138,6 +142,8 @@ static WlanApp* wlan_app_alloc(void) {
 
     app->update_sd_flow = false;
     app->sd_update = wlan_sd_update_alloc();
+    app->update_firmware_flow = false;
+    app->firmware_update = wlan_firmware_update_alloc();
 
     app->text_buf = furi_string_alloc();
     app->netcut = wlan_netcut_alloc();
@@ -179,6 +185,10 @@ static void wlan_app_free(WlanApp* app) {
         wlan_sd_update_free(app->sd_update);
         app->sd_update = NULL;
     }
+    if(app->firmware_update) {
+        wlan_firmware_update_free(app->firmware_update);
+        app->firmware_update = NULL;
+    }
     wlan_hal_stop();
 
     view_dispatcher_remove_view(app->view_dispatcher, WlanAppViewSubmenu);
@@ -198,6 +208,7 @@ static void wlan_app_free(WlanApp* app) {
     view_dispatcher_remove_view(app->view_dispatcher, WlanAppViewEvilPortalCaptured);
     view_dispatcher_remove_view(app->view_dispatcher, WlanAppViewLiveCreds);
     view_dispatcher_remove_view(app->view_dispatcher, WlanAppViewSdUpdate);
+    view_dispatcher_remove_view(app->view_dispatcher, WlanAppViewFirmwareUpdate);
 
     submenu_free(app->submenu);
     widget_free(app->widget);
@@ -216,6 +227,7 @@ static void wlan_app_free(WlanApp* app) {
     wlan_evil_portal_captured_view_free(app->evil_portal_captured_view_obj);
     wlan_live_creds_view_free(app->live_creds_view_obj);
     wlan_sd_update_view_free(app->view_sd_update);
+    wlan_firmware_update_view_free(app->view_firmware_update);
 
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);

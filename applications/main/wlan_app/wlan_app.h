@@ -17,6 +17,7 @@
 #include "wlan_mitm_payloads.h"
 #include "wlan_evil_portal_templates.h"
 #include "wlan_sd_update.h"
+#include "wlan_firmware_update.h"
 #include "views/wlan_lan_view.h"
 #include "views/wlan_connect_view.h"
 #include "views/wlan_portscan_view.h"
@@ -28,6 +29,7 @@
 #include "views/wlan_evil_portal_captured_view.h"
 #include "views/wlan_live_creds_view.h"
 #include "views/wlan_sd_update_view.h"
+#include "views/wlan_firmware_update_view.h"
 
 #define WLAN_APP_TAG "WlanApp"
 #define WLAN_APP_MAX_APS 64
@@ -54,6 +56,7 @@ typedef enum {
     WlanAppViewEvilPortalCaptured,
     WlanAppViewLiveCreds,
     WlanAppViewSdUpdate,
+    WlanAppViewFirmwareUpdate,
 } WlanAppView;
 
 typedef struct {
@@ -234,6 +237,12 @@ struct WlanApp {
     bool update_sd_flow;
     WlanSdUpdate* sd_update;
     View* view_sd_update;
+
+    // Staged updater: Flipper writes Bruce (ota_1), then Bruce resumes and
+    // writes Flipper (ota_0) using transaction state shared through NVS.
+    bool update_firmware_flow;
+    WlanFirmwareUpdate* firmware_update;
+    View* view_firmware_update;
 };
 
 /** Schlüssel der aktuellen Picker-Assoziation: Channel-Key im Channel-Mode,

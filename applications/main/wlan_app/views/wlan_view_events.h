@@ -60,4 +60,8 @@ typedef enum {
     WlanAppCustomEventUpdateSdStart = 200,
     WlanAppCustomEventUpdateSdCancel = 201,
     WlanAppCustomEventUpdateSdFinished = 202,
+
+    WlanAppCustomEventUpdateFirmwareStart = 210,
+    WlanAppCustomEventUpdateFirmwareCancel = 211,
+    WlanAppCustomEventUpdateFirmwareFinished = 212,
 } WlanAppCustomEvent;

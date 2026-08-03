@@ -114,3 +114,288 @@ index 00000000..f98b5430
 +};
 +
 +#endif // __FLIPPEROS_MENU_H__
+
+diff --git a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1,4 +1,5 @@
+ #include "core/main_menu.h"
++#include "core/menu_items/DualBootUpdater.h" // multi-boot staged updater
+ #include <globals.h>
+ 
+ #include "core/bus_HAL.h"
+@@ -513,6 +514,11 @@
+     setBrightness(bruceConfig.bright, false);
+     // end of post gpio begin
+ 
++    // A Flipper-initiated dual update writes Bruce first and leaves a shared
++    // NVS transaction. Resume it before starting normal background tasks so
++    // ota_0 is replaced only while Bruce is safely executing from ota_1.
++    dualBootUpdaterResumeIfPending();
++
+     // #ifndef USE_TFT_eSPI_TOUCH
+     // This task keeps running all the time, will never stop
+     xTaskCreate(
+
+diff --git a/src/core/menu_items/DualBootUpdater.h b/src/core/menu_items/DualBootUpdater.h
+new file mode 100644
+index 0000000..3e61c53
+--- /dev/null
++++ b/src/core/menu_items/DualBootUpdater.h
+@@ -0,0 +1,10 @@
++// --- Multi-boot add-on (not part of upstream Bruce) ---------------------------
++#ifndef __DUAL_BOOT_UPDATER_H__
++#define __DUAL_BOOT_UPDATER_H__
++
++/** Resume the second half of a staged dual-firmware update when Flipper has
++ * written a fresh Bruce image and armed the transaction in shared NVS.
++ * Returns true only when a pending transaction was found (success reboots). */
++bool dualBootUpdaterResumeIfPending();
++
++#endif // __DUAL_BOOT_UPDATER_H__
+
+diff --git a/src/core/menu_items/DualBootUpdater.cpp b/src/core/menu_items/DualBootUpdater.cpp
+new file mode 100644
+index 0000000..3ef9f50
+--- /dev/null
++++ b/src/core/menu_items/DualBootUpdater.cpp
+@@ -0,0 +1,239 @@
++// --- Multi-boot add-on (not part of upstream Bruce) ---------------------------
++#include "DualBootUpdater.h"
++
++#include "core/display.h"
++#include "core/wifi/wifi_common.h"
++
++#include <Arduino.h>
++#include <HTTPClient.h>
++#include <Preferences.h>
++#include <WiFi.h>
++#include <WiFiClientSecure.h>
++#include <esp_app_format.h>
++#include <esp_ota_ops.h>
++#include <esp_partition.h>
++#include <mbedtls/sha256.h>
++
++#define DUAL_OTA_NAMESPACE "dual_ota"
++#define DUAL_OTA_SCHEMA 1u
++#define DUAL_OTA_PHASE_PENDING 2u
++#define DUAL_OTA_PHASE_COMPLETE 3u
++#define DUAL_OTA_PHASE_ERROR 4u
++#define DUAL_OTA_SLOT_SIZE 0x500000u
++#define DUAL_OTA_CHUNK 8192
++
++static void dualOtaClearCredentials(Preferences &prefs) {
++    prefs.remove("password");
++}
++
++static void dualOtaFail(const String &message) {
++    Preferences prefs;
++    if (prefs.begin(DUAL_OTA_NAMESPACE, false)) {
++        prefs.putUChar("phase", DUAL_OTA_PHASE_ERROR);
++        prefs.putString("last_error", message);
++        dualOtaClearCredentials(prefs);
++        prefs.end();
++    }
++    displayError("Dual update failed:\n" + message, false);
++    delay(1800);
++}
++
++static int dualOtaHexValue(char c) {
++    if (c >= '0' && c <= '9') return c - '0';
++    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
++    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
++    return -1;
++}
++
++static bool dualOtaHashMatches(const uint8_t digest[32], const String &expected) {
++    if (expected.length() != 64) return false;
++    for (size_t i = 0; i < 32; ++i) {
++        int high = dualOtaHexValue(expected.charAt(i * 2));
++        int low = dualOtaHexValue(expected.charAt(i * 2 + 1));
++        if (high < 0 || low < 0 || digest[i] != (uint8_t)((high << 4) | low)) return false;
++    }
++    return true;
++}
++
++static bool dualOtaConnect(const String &ssid, const String &password) {
++    if (ssid.isEmpty()) return false;
++    if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == ssid) return true;
++    return _connectToWifiNetwork(ssid, password);
++}
++
++static bool dualOtaWriteFlipper(
++    const String &url, uint32_t expectedSize, const String &expectedSha) {
++    if (url.isEmpty() || expectedSize == 0 || expectedSize > DUAL_OTA_SLOT_SIZE ||
++        expectedSha.length() != 64) {
++        dualOtaFail("Invalid update state");
++        return false;
++    }
++
++    const esp_partition_t *running = esp_ota_get_running_partition();
++    if (running == nullptr || running->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_1) {
++        dualOtaFail("Bruce is not in ota_1");
++        return false;
++    }
++
++    const esp_partition_t *target = esp_partition_find_first(
++        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr
++    );
++    if (target == nullptr || target->size < DUAL_OTA_SLOT_SIZE) {
++        dualOtaFail("Flipper ota_0 missing");
++        return false;
++    }
++
++    WiFiClientSecure secureClient;
++    // The URL and expected SHA-256 were fetched by Flipper using the ESP-IDF
++    // certificate bundle. The binary is accepted only if that pinned digest
++    // matches, so transport tampering still fails closed here.
++    secureClient.setInsecure();
++    HTTPClient http;
++    http.setConnectTimeout(45000);
++    http.setTimeout(45000);
++    if (!http.begin(secureClient, url)) {
++        dualOtaFail("Download setup failed");
++        return false;
++    }
++
++    int status = http.GET();
++    if (status != HTTP_CODE_OK) {
++        http.end();
++        dualOtaFail("Download HTTP " + String(status));
++        return false;
++    }
++    int contentLength = http.getSize();
++    if (contentLength > 0 && (uint32_t)contentLength != expectedSize) {
++        http.end();
++        dualOtaFail("Flipper size mismatch");
++        return false;
++    }
++
++    esp_ota_handle_t otaHandle = 0;
++    esp_err_t err = esp_ota_begin(target, expectedSize, &otaHandle);
++    if (err != ESP_OK) {
++        http.end();
++        dualOtaFail("Could not erase ota_0");
++        return false;
++    }
++
++    uint8_t *buffer = (uint8_t *)malloc(DUAL_OTA_CHUNK);
++    if (buffer == nullptr) {
++        esp_ota_abort(otaHandle);
++        http.end();
++        dualOtaFail("Out of memory");
++        return false;
++    }
++
++    mbedtls_sha256_context sha;
++    mbedtls_sha256_init(&sha);
++    mbedtls_sha256_starts(&sha, 0);
++    WiFiClient *stream = http.getStreamPtr();
++    uint32_t received = 0;
++    bool failed = false;
++    unsigned long lastData = millis();
++
++    progressHandler(0, expectedSize, "Updating Flipper");
++    while (received < expectedSize) {
++        size_t available = stream->available();
++        if (available == 0) {
++            if (!http.connected() || millis() - lastData > 45000) {
++                failed = true;
++                break;
++            }
++            delay(2);
++            continue;
++        }
++
++        size_t request = min((size_t)DUAL_OTA_CHUNK, available);
++        request = min(request, (size_t)(expectedSize - received));
++        int count = stream->readBytes(buffer, request);
++        if (count <= 0) {
++            failed = true;
++            break;
++        }
++        lastData = millis();
++        if (esp_ota_write(otaHandle, buffer, (size_t)count) != ESP_OK) {
++            failed = true;
++            break;
++        }
++        mbedtls_sha256_update(&sha, buffer, (size_t)count);
++        received += (uint32_t)count;
++        progressHandler(received, expectedSize, "Updating Flipper");
++    }
++
++    uint8_t digest[32];
++    mbedtls_sha256_finish(&sha, digest);
++    mbedtls_sha256_free(&sha);
++    free(buffer);
++    http.end();
++
++    if (failed || received != expectedSize) {
++        esp_ota_abort(otaHandle);
++        dualOtaFail("Flipper download incomplete");
++        return false;
++    }
++    if (!dualOtaHashMatches(digest, expectedSha)) {
++        esp_ota_abort(otaHandle);
++        dualOtaFail("Flipper SHA mismatch");
++        return false;
++    }
++    if (esp_ota_end(otaHandle) != ESP_OK) {
++        dualOtaFail("Flipper image invalid");
++        return false;
++    }
++
++    esp_app_desc_t description;
++    if (esp_ota_get_partition_description(target, &description) != ESP_OK) {
++        dualOtaFail("Flipper is not bootable");
++        return false;
++    }
++    if (esp_ota_set_boot_partition(target) != ESP_OK) {
++        dualOtaFail("Could not select ota_0");
++        return false;
++    }
++    return true;
++}
++
++bool dualBootUpdaterResumeIfPending() {
++    Preferences prefs;
++    if (!prefs.begin(DUAL_OTA_NAMESPACE, true)) return false;
++    uint8_t schema = prefs.getUChar("schema", 0);
++    uint8_t phase = prefs.getUChar("phase", 0);
++    if (schema != DUAL_OTA_SCHEMA || phase != DUAL_OTA_PHASE_PENDING) {
++        prefs.end();
++        return false;
++    }
++
++    String ssid = prefs.getString("ssid", "");
++    String password = prefs.getString("password", "");
++    String flipperUrl = prefs.getString("fl_url", "");
++    String flipperSha = prefs.getString("fl_sha", "");
++    uint32_t flipperSize = prefs.getULong("fl_size", 0);
++    prefs.end();
++
++    drawMainBorderWithTitle("Firmware Update");
++    padprintln("");
++    padprintln("Stage 2/2");
++    padprintln("Connecting to WiFi...");
++
++    if (!dualOtaConnect(ssid, password)) {
++        dualOtaFail("WiFi connection failed");
++        return true;
++    }
++
++    if (!dualOtaWriteFlipper(flipperUrl, flipperSize, flipperSha)) return true;
++
++    if (prefs.begin(DUAL_OTA_NAMESPACE, false)) {
++        prefs.putUChar("phase", DUAL_OTA_PHASE_COMPLETE);
++        prefs.remove("last_error");
++        prefs.remove("ssid");
++        dualOtaClearCredentials(prefs);
++        prefs.end();
++    }
++
++    displayInfo("Both firmwares updated.\nRebooting to Flipper...", false);
++    delay(700);
++    ESP.restart();
++    return true;
++}

@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - restore-bruce-dual-boot
+  pull_request:
+    branches:
+      - restore-bruce-dual-boot
   workflow_dispatch:
 
 permissions:
@@ -101,9 +104,17 @@ jobs:
           test -s _site/firmware/t-embed-dual/latest/partition-table.bin
           test -s _site/firmware/t-embed-dual/latest/flipper.bin
           test -s _site/firmware/t-embed-dual/latest/bruce.bin
+          test -s _site/firmware/t-embed-dual/latest/update.txt
+          grep -q '^layout=t-embed-dual-v1$' \
+            _site/firmware/t-embed-dual/latest/update.txt
+          grep -Eq '^bruce_sha256=[0-9a-f]{64}$' \
+            _site/firmware/t-embed-dual/latest/update.txt
+          grep -Eq '^flipper_sha256=[0-9a-f]{64}$' \
+            _site/firmware/t-embed-dual/latest/update.txt
           find _site -maxdepth 5 -type f -printf '%p %s bytes\n' | sort
 
       - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
 
       - name: Upload downloadable build artifact
@@ -115,12 +126,14 @@ jobs:
           retention-days: 30
 
       - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: _site/
 
   deploy:
     name: Deploy GitHub Pages
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-24.04
     environment:
