@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Prepare pinned Bruce source
+        run: python3 patchBruce.py
       - name: Create source archive
         run: |
           tar --exclude=.git --exclude=.pio --exclude=build_t_embed -czf /tmp/source-snapshot.tar.gz .
