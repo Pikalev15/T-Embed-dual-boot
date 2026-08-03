@@ -1,0 +1,25 @@
+name: Source snapshot
+
+on:
+  pull_request:
+    branches:
+      - restore-bruce-dual-boot
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Create source archive
+        run: |
+          tar --exclude=.git --exclude=.pio --exclude=build_t_embed -czf source-snapshot.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot
+          path: source-snapshot.tar.gz
+          retention-days: 1
