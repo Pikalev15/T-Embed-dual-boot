@@ -169,6 +169,29 @@ def build_site(output: Path) -> None:
     manifest_path = firmware_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
+    # Small line-oriented manifest consumed by the on-device updater. Keeping
+    # this separate from manifest.json avoids bringing a JSON parser into the
+    # Flipper port and makes strict validation straightforward on both stages.
+    parts_by_name = {str(part["name"]): part for part in manifest_parts}
+    flipper = parts_by_name["flipper"]
+    bruce = parts_by_name["bruce"]
+    update_manifest = "\n".join(
+        (
+            "schema=1",
+            "layout=t-embed-dual-v1",
+            f"release={manifest['commit']}",
+            f"bruce_file={bruce['file']}",
+            f"bruce_size={bruce['size']}",
+            f"bruce_sha256={bruce['sha256']}",
+            f"flipper_file={flipper['file']}",
+            f"flipper_size={flipper['size']}",
+            f"flipper_sha256={flipper['sha256']}",
+            "",
+        )
+    )
+    update_manifest_path = firmware_dir / "update.txt"
+    update_manifest_path.write_text(update_manifest, encoding="utf-8")
+
     print(f"Prepared browser-flasher site: {output}")
     for part in manifest_parts:
         print(
@@ -176,6 +199,7 @@ def build_site(output: Path) -> None:
             f"{part['size']:>8} bytes  {part['sha256']}"
         )
     print(f"  manifest: {manifest_path}")
+    print(f"  updater:  {update_manifest_path}")
 
 
 def parse_args() -> argparse.Namespace:

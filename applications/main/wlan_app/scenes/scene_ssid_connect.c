@@ -123,7 +123,10 @@ bool wlan_app_scene_ssid_connect_on_event(void* context, SceneManagerEvent event
             app->connected = true;
             app->target_selected = false;
             app->lan_scan_complete = false;
-            if(app->update_sd_flow) {
+            if(app->update_firmware_flow) {
+                // Firmware updater streams Bruce first and resumes in Bruce.
+                scene_manager_next_scene(app->scene_manager, WlanAppSceneUpdateFirmware);
+            } else if(app->update_sd_flow) {
                 // Update-SD-Flow braucht keinen ARP-Scan → direkt zur
                 // Bestätigung/Download-Scene.
                 scene_manager_next_scene(app->scene_manager, WlanAppSceneUpdateSd);

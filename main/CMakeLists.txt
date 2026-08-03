@@ -67,6 +67,9 @@ if(NOT CMAKE_SCRIPT_MODE_FILE)
         idf::toolbox
         idf::esp_http_client
         idf::esp_http_server
+        idf::esp_partition
+        idf::mbedtls
+        idf::nvs_flash
         idf::lfrfid
         idf::mjs
     )

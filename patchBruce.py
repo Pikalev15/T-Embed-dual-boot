@@ -34,6 +34,8 @@ PARTITIONS_DST_NAME = "custom_16Mb.csv"
 PATCH_CREATED_FILES = [
     "src/core/menu_items/FlipperOsMenu.h",
     "src/core/menu_items/FlipperOsMenu.cpp",
+    "src/core/menu_items/DualBootUpdater.h",
+    "src/core/menu_items/DualBootUpdater.cpp",
 ]
 
 

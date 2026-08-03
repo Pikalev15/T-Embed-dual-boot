@@ -12,6 +12,7 @@ enum MainIndex {
     MainIndexChannelSsidSpam = 13,
     MainIndexChannelEvilPortal = 14,
     MainIndexUpdateSd = 15,
+    MainIndexUpdateFirmware = 16,
 };
 
 static void wlan_app_scene_main_submenu_cb(void* context, uint32_t index) {
@@ -26,8 +27,9 @@ void wlan_app_scene_main_on_enter(void* context) {
 
     // Channel-Aktionen sind immer sichtbar; Verbindungs-Aktionen sind state-abhängig.
     app->channel_mode_active = false;
-    // Hub-Scene: ein evtl. abgebrochener Update-SD-Flow wird hier zurückgesetzt.
+    // Hub scene: reset any abandoned update routing flags.
     app->update_sd_flow = false;
+    app->update_firmware_flow = false;
 
     if(!app->connected && !app->target_selected) {
         submenu_add_item_centered(
@@ -69,6 +71,9 @@ void wlan_app_scene_main_on_enter(void* context) {
         wlan_app_scene_main_submenu_cb, app);
     submenu_add_item(
         app->submenu, "Update SD", MainIndexUpdateSd,
+        wlan_app_scene_main_submenu_cb, app);
+    submenu_add_item(
+        app->submenu, "Update Firmware", MainIndexUpdateFirmware,
         wlan_app_scene_main_submenu_cb, app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, WlanAppViewSubmenu);
@@ -143,6 +148,15 @@ bool wlan_app_scene_main_on_event(void* context, SceneManagerEvent event) {
                 scene_manager_next_scene(app->scene_manager, WlanAppSceneUpdateSd);
             } else {
                 // Kein WLAN → gleicher Connect-Flow wie "Select Wifi".
+                scene_manager_next_scene(app->scene_manager, WlanAppSceneConnect);
+            }
+            consumed = true;
+            break;
+        case MainIndexUpdateFirmware:
+            app->update_firmware_flow = true;
+            if(app->connected) {
+                scene_manager_next_scene(app->scene_manager, WlanAppSceneUpdateFirmware);
+            } else {
                 scene_manager_next_scene(app->scene_manager, WlanAppSceneConnect);
             }
             consumed = true;

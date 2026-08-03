@@ -70,6 +70,19 @@ The current implementation:
 
 The Bruce patch adds a **Flipper Zero** entry to Bruce’s main menu. Selecting it sets `ota_0` as the next boot partition and restarts the device.
 
+### Updating both firmwares in-app
+
+Open **WiFi → Update Firmware** from the Flipper port. Connect to Wi-Fi when prompted, confirm the update, and keep the device powered until it returns to the Flipper home screen.
+
+The updater is intentionally staged because a running application cannot overwrite its own OTA partition:
+
+1. Flipper downloads the release metadata over verified TLS.
+2. Flipper streams and verifies `bruce.bin`, writes it to `ota_1`, and reboots.
+3. Bruce resumes the signed transaction from shared NVS, reconnects to Wi-Fi, streams and verifies `flipper.bin`, and writes it to `ota_0`.
+4. Bruce selects `ota_0`, clears the temporary Wi-Fi password, and reboots into the updated Flipper port.
+
+The in-app updater never writes the bootloader, partition table, SD card, or Bruce SPIFFS partition. Changes to the flash layout still require the USB/browser flasher. Do not interrupt power during either writing stage.
+
 ## Supported hardware
 
 ### Dual boot target
@@ -284,10 +297,10 @@ Common paths include:
 |---|---|
 | `buildAndFlash_T-Embed.sh` | Build and flash both firmware images |
 | `patchBruce.py` | Clone, pin, reset, and patch Bruce reproducibly |
-| `tools/bruce_multiboot.patch` | Add the return-to-Flipper menu item to Bruce |
+| `tools/bruce_multiboot.patch` | Add the return-to-Flipper menu and staged updater to Bruce |
 | `partitions_multiboot.csv` | Shared 16 MB dual-boot layout |
 | `sdkconfig.defaults.esp32s3` | ESP32-S3 build defaults |
-| `dual-boot.html` | Browser flasher UI; dual-boot flow not yet validated |
+| `dual-boot.html` | Browser flasher UI; also hosts the in-app update binaries and manifests |
 | `multi-boot/bruce/` | Local Bruce checkout generated during the build |
 
 ## Updating the pinned Bruce revision
@@ -310,6 +323,7 @@ silently producing a build without the return-to-Flipper entry.
 - the current branch tip still needs a fresh build-only verification
 - there is no boot-time recovery selector
 - there is no automatic rollback after repeated boot failures
+- the staged in-app updater still requires real-hardware interruption and recovery testing
 - upgrading the pinned Bruce revision requires a compatibility test
 - features depending on external hardware, board-specific pins, or SD assets require separate testing
 - encrypted manufacturer Sub-GHz keystores that depend on unavailable Flipper enclave keys are not supported
@@ -327,7 +341,7 @@ The MVP is complete only after:
 - power-off and deep sleep still work
 - a practical recovery path is documented and tested
 
-Later improvements can include a boot selector, forced-recovery gesture, crash counter, separate firmware updates, branch-specific web flashing, release packaging, and automated builds.
+Later improvements can include a boot selector, forced-recovery gesture, crash counter, automatic rollback, and tested release packaging.
 
 ## Credits
 
