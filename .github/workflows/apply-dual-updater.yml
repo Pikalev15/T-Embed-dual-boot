@@ -38,11 +38,14 @@ jobs:
           git apply --check /tmp/dual-updater.patch
           git apply /tmp/dual-updater.patch
 
-      - name: Commit implementation and remove bootstrap workflow
+      - name: Commit implementation
         env:
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
-          rm -f .github/workflows/apply-dual-updater.yml
+          # GITHUB_TOKEN cannot modify workflow files in this repository.
+          # The connector applies the workflow change and removes this bootstrap
+          # file after the source implementation is pushed.
+          git restore .github/workflows/dual-boot-pages.yml
           git add -A
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
