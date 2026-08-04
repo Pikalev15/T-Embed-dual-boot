@@ -8,6 +8,7 @@
 #include "views/desktop_view_pin_input.h"
 #include "views/desktop_view_locked.h"
 #include "views/desktop_view_main.h"
+#include "views/desktop_view_boot_selector.h"
 #include "views/desktop_view_lock_menu.h"
 #include "views/desktop_view_usb_storage.h"
 #include "views/desktop_view_mesh_clients.h"
@@ -36,6 +37,7 @@
 
 typedef enum {
     DesktopViewIdMain,
+    DesktopViewIdBootSelector,
     DesktopViewIdLockMenu,
     DesktopViewIdUsbStorage,
     DesktopViewIdMeshClients,
@@ -68,6 +70,7 @@ struct Desktop {
 
     Popup* popup;
     DialogEx* mesh_pair_dialog;
+    DesktopBootSelectorView* boot_selector_view;
     DesktopLockMenuView* lock_menu;
     DesktopUsbStorageView* usb_storage_view;
     DesktopMeshClientsView* mesh_clients_view;
@@ -142,6 +145,7 @@ void desktop_lock(Desktop* desktop);
 void desktop_unlock(Desktop* desktop);
 void desktop_set_dummy_mode_state(Desktop* desktop, bool enabled);
 void desktop_set_stealth_mode_state(Desktop* desktop, bool enabled);
+bool desktop_boot_selector_available(void);
 
 /* Mesh-Callback (impl in desktop.c): packt das Event in desktop->mesh_pending
  * und feuert DesktopMeshEventClient{PairRequest,Disconnect} via
