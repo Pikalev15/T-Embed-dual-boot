@@ -137,31 +137,18 @@ def assert_flipper_switch_contract() -> None:
     assert matches, "Flipper-side source no longer contains the switch to Bruce/ota_1"
 
 
-def assert_boot_selector_contract() -> None:
+def assert_boot_selector_disabled() -> None:
+    """Keep the experimental selector out of production until its bootloop is fixed."""
     fam_config = FAM_CONFIG.read_text(encoding="utf-8")
-    assert '"boot_selector"' in fam_config, "Boot selector is not included in fam_config.py APPS"
+    assert '"boot_selector"' not in fam_config, (
+        "Experimental boot selector must stay disabled after the startup bootloop"
+    )
 
+    # Preserve the draft implementation for later rework, but do not compile it.
     manifest = BOOT_SELECTOR_MANIFEST.read_text(encoding="utf-8")
-    for marker in (
-        'appid="boot_selector"',
-        "FlipperAppType.STARTUP",
-        'entry_point="boot_selector_startup"',
-        '"desktop"',
-        "order=210",
-    ):
-        assert marker in manifest, f"Boot selector manifest lost marker: {marker}"
-
     source = BOOT_SELECTOR_SOURCE.read_text(encoding="utf-8")
-    for marker in (
-        "void boot_selector_startup(void)",
-        "BOOT_SELECTOR_TIMEOUT_TICKS",
-        "ESP_PARTITION_SUBTYPE_APP_OTA_1",
-        "esp_ota_set_boot_partition(target)",
-        "Auto Flipper in %us",
-        "view_dispatcher_set_tick_event_callback",
-        "furi_delay_ms(250)",
-    ):
-        assert marker in source, f"Boot selector source lost marker: {marker}"
+    assert 'appid="boot_selector"' in manifest
+    assert "boot_selector_startup" in source
 
 
 def main() -> None:
@@ -169,7 +156,7 @@ def main() -> None:
     assert_manual_flasher_contract()
     assert_bruce_patch_contract()
     assert_flipper_switch_contract()
-    assert_boot_selector_contract()
+    assert_boot_selector_disabled()
     print("Multiboot invariants passed.")
 
 
