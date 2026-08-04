@@ -121,8 +121,7 @@ bool desktop_scene_boot_selector_on_event(void* context, SceneManagerEvent event
             desktop_boot_selector_launch_bruce(desktop);
             return true;
         }
-        if((event.event == DialogExResultLeft) ||
-           (event.event == DialogExResultCenter)) {
+        if(event.event == DialogExResultLeft) {
             desktop_boot_selector_continue_flipper(desktop);
             return true;
         }
