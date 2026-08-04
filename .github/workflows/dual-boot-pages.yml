@@ -15,12 +15,26 @@ permissions:
   id-token: write
 
 concurrency:
-  group: t-embed-dual-boot-pages
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  pr-checks:
+    name: Fast PR checks
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+
+      - name: Run host and multiboot invariant tests
+        run: ./tests/run_host_tests.sh
+
   build:
     name: Build both firmwares and package site
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
 
@@ -114,7 +128,6 @@ jobs:
           find _site -maxdepth 5 -type f -printf '%p %s bytes\n' | sort
 
       - name: Configure GitHub Pages
-        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
 
       - name: Upload downloadable build artifact
@@ -126,7 +139,6 @@ jobs:
           retention-days: 30
 
       - name: Upload GitHub Pages artifact
-        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: _site/
