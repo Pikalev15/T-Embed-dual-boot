@@ -111,6 +111,12 @@ def assert_bruce_patch_contract() -> None:
         "ESP_PARTITION_SUBTYPE_APP_OTA_0",
         "esp_ota_set_boot_partition(flipper)",
         "dualBootUpdaterResumeIfPending();",
+        'prefs.begin("dual_boot", false)',
+        'prefs.putUChar("skip_once", 1)',
+        '"Reboot to Flipper"',
+        '"Dual Boot Menu"',
+        "rebootToFlipperOs(true)",
+        "rebootToFlipperOs(false)",
     ):
         assert marker in selector_patcher, f"Bruce selector return hook lost marker: {marker}"
 
@@ -169,6 +175,12 @@ def assert_boot_selector_contract() -> None:
         "ESP_RST_TASK_WDT",
         "ESP_RST_PANIC",
         "scene_manager_previous_scene",
+        'DUAL_BOOT_NVS_NAMESPACE "dual_boot"',
+        'DUAL_BOOT_SKIP_ONCE_KEY "skip_once"',
+        "nvs_get_u8",
+        "nvs_erase_key",
+        "nvs_commit",
+        "desktop_boot_selector_consume_skip_once()",
     ):
         assert marker in boot_scene, f"Desktop selector lost safety marker: {marker}"
 
