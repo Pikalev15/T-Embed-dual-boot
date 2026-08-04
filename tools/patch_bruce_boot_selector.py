@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Patch the generated Bruce tree so the Flipper selector remains the front door.
+"""Patch the generated Bruce tree for the shared dual-boot selector contract.
 
 The startup selector lives in ota_0 (Flipper). When it launches Bruce in ota_1,
 Bruce immediately arms ota_0 as the *next* boot target without rebooting. Bruce
 continues running normally, but any later reset or power cycle returns through
 the selector instead of bypassing it.
 
-Run only after tools/bruce_multiboot.patch has created DualBootUpdater.{h,cpp}.
+Bruce's Flipper menu gets two explicit choices:
+  - Reboot to Flipper: set a one-shot shared-NVS flag, then boot ota_0 directly
+  - Dual Boot Menu: clear that flag, then boot ota_0 and show the selector
+
+Run only after tools/bruce_multiboot.patch has created the Bruce add-on files.
 The edits are idempotent and intentionally do not change the partition table.
 """
 
@@ -17,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BRUCE = ROOT / "multi-boot" / "bruce"
 HEADER = BRUCE / "src" / "core" / "menu_items" / "DualBootUpdater.h"
 SOURCE = BRUCE / "src" / "core" / "menu_items" / "DualBootUpdater.cpp"
+FLIPPER_MENU = BRUCE / "src" / "core" / "menu_items" / "FlipperOsMenu.cpp"
 MAIN = BRUCE / "src" / "main.cpp"
 
 
@@ -29,11 +34,7 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def main() -> int:
-    for path in (HEADER, SOURCE, MAIN):
-        if not path.is_file():
-            raise RuntimeError(f"missing patched Bruce file: {path}")
-
+def patch_next_reset_front_door() -> None:
     header = HEADER.read_text(encoding="utf-8")
     header = replace_once(
         header,
@@ -83,7 +84,80 @@ void dualBootArmFlipperForNextReset() {
     )
     MAIN.write_text(main_cpp, encoding="utf-8")
 
-    print("Patched Bruce to return through the Flipper startup selector on next reset")
+
+def patch_flipper_menu_choices() -> None:
+    menu = FLIPPER_MENU.read_text(encoding="utf-8")
+
+    menu = replace_once(
+        menu,
+        "#include <esp_partition.h>\n",
+        "#include <esp_partition.h>\n#include <Preferences.h>\n",
+        "Preferences include",
+    )
+
+    menu = replace_once(
+        menu,
+        "static void rebootToFlipperOs(void) {\n",
+        "static bool setSkipSelectorOnce(bool skipSelector) {\n"
+        "    Preferences prefs;\n"
+        "    if (!prefs.begin(\"dual_boot\", false)) return false;\n\n"
+        "    bool ok = true;\n"
+        "    if (skipSelector) {\n"
+        "        ok = prefs.putUChar(\"skip_once\", 1) == 1;\n"
+        "    } else {\n"
+        "        // Clear a stale direct-boot request before deliberately opening\n"
+        "        // the selector. remove() may return false when the key is absent.\n"
+        "        prefs.remove(\"skip_once\");\n"
+        "    }\n"
+        "    prefs.end();\n"
+        "    return ok;\n"
+        "}\n\n"
+        "static void rebootToFlipperOs(bool skipSelector) {\n",
+        "Flipper reboot helper",
+    )
+
+    menu = replace_once(
+        menu,
+        "    displayInfo(\"Rebooting to Flipper Zero...\");\n"
+        "    delay(150);\n"
+        "    ESP.restart();\n",
+        "    if (!setSkipSelectorOnce(skipSelector)) {\n"
+        "        displayError(\"Could not save boot preference.\", true);\n"
+        "        return;\n"
+        "    }\n"
+        "    displayInfo(skipSelector ? \"Rebooting directly to Flipper...\"\n"
+        "                             : \"Opening dual boot menu...\");\n"
+        "    delay(150);\n"
+        "    ESP.restart();\n",
+        "Flipper reboot preference",
+    )
+
+    menu = replace_once(
+        menu,
+        "    options = {\n"
+        "        {\"Reboot to Flipper\", []() { rebootToFlipperOs(); }},\n"
+        "    };\n",
+        "    options = {\n"
+        "        {\"Reboot to Flipper\", []() { rebootToFlipperOs(true); }},\n"
+        "        {\"Dual Boot Menu\", []() { rebootToFlipperOs(false); }},\n"
+        "    };\n",
+        "Flipper menu choices",
+    )
+
+    FLIPPER_MENU.write_text(menu, encoding="utf-8")
+
+
+def main() -> int:
+    for path in (HEADER, SOURCE, FLIPPER_MENU, MAIN):
+        if not path.is_file():
+            raise RuntimeError(f"missing patched Bruce file: {path}")
+
+    patch_next_reset_front_door()
+    patch_flipper_menu_choices()
+
+    print(
+        "Patched Bruce with selector-on-reset plus direct-Flipper and dual-boot menu choices"
+    )
     return 0
 
 
