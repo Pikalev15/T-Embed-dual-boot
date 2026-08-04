@@ -13,8 +13,10 @@ PATCH_BRUCE = ROOT / "patchBruce.py"
 BRUCE_PATCH = ROOT / "tools" / "bruce_multiboot.patch"
 BRUCE_SELECTOR_PATCHER = ROOT / "tools" / "patch_bruce_boot_selector.py"
 FAM_CONFIG = ROOT / "fam_config.py"
-BOOT_SELECTOR_MANIFEST = ROOT / "applications" / "services" / "boot_selector" / "application.fam"
-BOOT_SELECTOR_SOURCE = ROOT / "applications" / "services" / "boot_selector" / "boot_selector.c"
+DESKTOP_SCENE_CONFIG = ROOT / "applications" / "services" / "desktop" / "scenes" / "desktop_scene_config.h"
+DESKTOP_MAIN_SCENE = ROOT / "applications" / "services" / "desktop" / "scenes" / "desktop_scene_main.c"
+DESKTOP_BOOT_SCENE = ROOT / "applications" / "services" / "desktop" / "scenes" / "desktop_scene_boot_selector.c"
+OLD_SELECTOR_DIR = ROOT / "applications" / "services" / "boot_selector"
 FLASH_SIZE = 0x1000000
 
 
@@ -137,18 +139,42 @@ def assert_flipper_switch_contract() -> None:
     assert matches, "Flipper-side source no longer contains the switch to Bruce/ota_1"
 
 
-def assert_boot_selector_disabled() -> None:
-    """Keep the experimental selector out of production until its bootloop is fixed."""
+def assert_boot_selector_contract() -> None:
+    """Selector must be part of Desktop, never a second startup dispatcher."""
     fam_config = FAM_CONFIG.read_text(encoding="utf-8")
     assert '"boot_selector"' not in fam_config, (
-        "Experimental boot selector must stay disabled after the startup bootloop"
+        "Boot selector must not return as a standalone FAM startup app"
     )
+    assert not (OLD_SELECTOR_DIR / "application.fam").exists()
+    assert not (OLD_SELECTOR_DIR / "boot_selector.c").exists()
 
-    # Preserve the draft implementation for later rework, but do not compile it.
-    manifest = BOOT_SELECTOR_MANIFEST.read_text(encoding="utf-8")
-    source = BOOT_SELECTOR_SOURCE.read_text(encoding="utf-8")
-    assert 'appid="boot_selector"' in manifest
-    assert "boot_selector_startup" in source
+    scene_config = DESKTOP_SCENE_CONFIG.read_text(encoding="utf-8")
+    assert "ADD_SCENE(desktop, boot_selector, BootSelector)" in scene_config
+
+    main_scene = DESKTOP_MAIN_SCENE.read_text(encoding="utf-8")
+    for marker in (
+        "desktop_boot_selector_should_show()",
+        "DesktopMainEventShowBootSelector",
+        "scene_manager_next_scene(desktop->scene_manager, DesktopSceneBootSelector)",
+    ):
+        assert marker in main_scene, f"Desktop main lost selector handoff: {marker}"
+
+    boot_scene = DESKTOP_BOOT_SCENE.read_text(encoding="utf-8")
+    for marker in (
+        "DialogEx* dialog = desktop->mesh_pair_dialog",
+        'dialog_ex_set_left_button_text(dialog, "Flipper")',
+        'dialog_ex_set_right_button_text(dialog, "Bruce")',
+        "ESP_PARTITION_SUBTYPE_APP_OTA_1",
+        "esp_ota_set_boot_partition(target)",
+        "ESP_RST_TASK_WDT",
+        "ESP_RST_PANIC",
+        "scene_manager_previous_scene",
+    ):
+        assert marker in boot_scene, f"Desktop selector lost safety marker: {marker}"
+
+    assert "view_dispatcher_alloc" not in boot_scene, (
+        "Selector must reuse Desktop's dispatcher; a second dispatcher caused the boot loop"
+    )
 
 
 def main() -> None:
@@ -156,7 +182,7 @@ def main() -> None:
     assert_manual_flasher_contract()
     assert_bruce_patch_contract()
     assert_flipper_switch_contract()
-    assert_boot_selector_disabled()
+    assert_boot_selector_contract()
     print("Multiboot invariants passed.")
 
 
