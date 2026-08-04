@@ -170,18 +170,20 @@ static bool boot_selector_switch_to_bruce(void) {
     return true;
 }
 
-int32_t boot_selector_srv(void* context) {
-    UNUSED(context);
-
+void boot_selector_startup(void) {
     const bool bruce_available =
         boot_selector_find_valid_ota(ESP_PARTITION_SUBTYPE_APP_OTA_1) != NULL;
 
     /* A selector with only one valid OS adds delay without providing recovery. */
     if(!bruce_available) {
         FURI_LOG_W(TAG, "Bruce is missing; skipping startup selector");
-        furi_thread_suspend(furi_thread_get_current_id());
-        return 0;
+        return;
     }
+
+    /* app_main invokes STARTUP hooks only after all services have been launched.
+     * Give Desktop a moment to attach its own view, then place this fullscreen
+     * dispatcher on top so it cannot be immediately hidden during startup. */
+    furi_delay_ms(250);
 
     BootSelector selector = {
         .dispatcher = view_dispatcher_alloc(),
@@ -221,8 +223,4 @@ int32_t boot_selector_srv(void* context) {
     if(selector.launch_bruce) {
         boot_selector_switch_to_bruce();
     }
-
-    /* Services must not return. Flipper continues behind the dismissed selector. */
-    furi_thread_suspend(furi_thread_get_current_id());
-    return 0;
 }
