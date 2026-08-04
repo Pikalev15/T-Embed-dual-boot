@@ -1,15 +1,14 @@
 App(
     appid="boot_selector",
     name="DualBootSelector",
-    apptype=FlipperAppType.SERVICE,
-    entry_point="boot_selector_srv",
+    apptype=FlipperAppType.STARTUP,
+    entry_point="boot_selector_startup",
     requires=[
         "gui",
         "input",
+        "desktop",
     ],
-    provides=[],
-    conflicts=[],
-    stack_size=3 * 1024,
-    # Start just after Desktop so this fullscreen selector is the top GUI view.
+    # Run after the normal services have started. Startup hooks execute
+    # synchronously, so the selector remains in front until dismissed.
     order=210,
 )
