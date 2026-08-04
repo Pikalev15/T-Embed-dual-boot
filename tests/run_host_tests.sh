@@ -6,6 +6,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 TEST_BINARY="$(mktemp "${TMPDIR:-/tmp}/t-embed-host-tests.XXXXXX")"
 trap 'rm -f "${TEST_BINARY}"' EXIT
 
+python3 "${SCRIPT_DIR}/test_multiboot_invariants.py"
+
 "${CC:-cc}" \
     -std=c11 \
     -Wall \
