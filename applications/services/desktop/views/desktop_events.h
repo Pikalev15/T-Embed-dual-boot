@@ -12,6 +12,7 @@ typedef enum {
     DesktopMainEventOpenMenu,
     DesktopMainEventOpenDebug,
     DesktopMainEventOpenPowerOff,
+    DesktopMainEventShowBootSelector,
 
     DesktopDummyEventOpenLeft,
     DesktopDummyEventOpenDown,
@@ -36,9 +37,6 @@ typedef enum {
 
     DesktopDebugEventToggleDebugMode,
     DesktopDebugEventExit,
-
-    DesktopBootSelectorEventConfirm,
-    DesktopBootSelectorEventCancel,
 
     DesktopLockMenuEventQflipperToggle,
     DesktopLockMenuEventUsbStorage,
