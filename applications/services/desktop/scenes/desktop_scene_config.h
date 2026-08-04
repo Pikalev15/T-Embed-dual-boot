@@ -1,4 +1,5 @@
 ADD_SCENE(desktop, main, Main)
+ADD_SCENE(desktop, boot_selector, BootSelector)
 ADD_SCENE(desktop, lock_menu, LockMenu)
 ADD_SCENE(desktop, usb_storage, UsbStorage)
 ADD_SCENE(desktop, mesh_clients, MeshClients)
