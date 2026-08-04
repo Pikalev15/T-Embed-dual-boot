@@ -142,6 +142,7 @@ void desktop_lock(Desktop* desktop);
 void desktop_unlock(Desktop* desktop);
 void desktop_set_dummy_mode_state(Desktop* desktop, bool enabled);
 void desktop_set_stealth_mode_state(Desktop* desktop, bool enabled);
+bool desktop_boot_selector_should_show(void);
 
 /* Mesh-Callback (impl in desktop.c): packt das Event in desktop->mesh_pending
  * und feuert DesktopMeshEventClient{PairRequest,Disconnect} via

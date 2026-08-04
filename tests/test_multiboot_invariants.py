@@ -11,6 +11,12 @@ PARTITIONS = ROOT / "partitions_multiboot.csv"
 BUILD_SCRIPT = ROOT / "buildAndFlash_T-Embed.sh"
 PATCH_BRUCE = ROOT / "patchBruce.py"
 BRUCE_PATCH = ROOT / "tools" / "bruce_multiboot.patch"
+BRUCE_SELECTOR_PATCHER = ROOT / "tools" / "patch_bruce_boot_selector.py"
+FAM_CONFIG = ROOT / "fam_config.py"
+DESKTOP_SCENE_CONFIG = ROOT / "applications" / "services" / "desktop" / "scenes" / "desktop_scene_config.h"
+DESKTOP_MAIN_SCENE = ROOT / "applications" / "services" / "desktop" / "scenes" / "desktop_scene_main.c"
+DESKTOP_BOOT_SCENE = ROOT / "applications" / "services" / "desktop" / "scenes" / "desktop_scene_boot_selector.c"
+OLD_SELECTOR_DIR = ROOT / "applications" / "services" / "boot_selector"
 FLASH_SIZE = 0x1000000
 
 
@@ -83,6 +89,8 @@ def assert_bruce_patch_contract() -> None:
     for marker in (
         'BRUCE_REPO_URL = "https://github.com/BruceDevices/firmware.git"',
         'PATCH_FILE = REPO_ROOT / "tools" / "bruce_multiboot.patch"',
+        'BOOT_SELECTOR_PATCHER = REPO_ROOT / "tools" / "patch_bruce_boot_selector.py"',
+        "run([sys.executable, str(BOOT_SELECTOR_PATCHER)])",
         'PARTITIONS_DST_NAME = "custom_16Mb.csv"',
         "shutil.copyfile(PARTITIONS_SRC",
     ):
@@ -96,6 +104,21 @@ def assert_bruce_patch_contract() -> None:
         "Reboot to Flipper",
     ):
         assert marker in patch, f"Bruce return-to-Flipper patch lost marker: {marker}"
+
+    selector_patcher = BRUCE_SELECTOR_PATCHER.read_text(encoding="utf-8")
+    for marker in (
+        "dualBootArmFlipperForNextReset",
+        "ESP_PARTITION_SUBTYPE_APP_OTA_0",
+        "esp_ota_set_boot_partition(flipper)",
+        "dualBootUpdaterResumeIfPending();",
+        "dual_boot",
+        "skip_once",
+        "Reboot to Flipper",
+        "Dual Boot Menu",
+        "rebootToFlipperOs(true)",
+        "rebootToFlipperOs(false)",
+    ):
+        assert marker in selector_patcher, f"Bruce selector return hook lost marker: {marker}"
 
 
 def assert_flipper_switch_contract() -> None:
@@ -122,11 +145,56 @@ def assert_flipper_switch_contract() -> None:
     assert matches, "Flipper-side source no longer contains the switch to Bruce/ota_1"
 
 
+def assert_boot_selector_contract() -> None:
+    """Selector must be part of Desktop, never a second startup dispatcher."""
+    fam_config = FAM_CONFIG.read_text(encoding="utf-8")
+    assert '"boot_selector"' not in fam_config, (
+        "Boot selector must not return as a standalone FAM startup app"
+    )
+    assert not (OLD_SELECTOR_DIR / "application.fam").exists()
+    assert not (OLD_SELECTOR_DIR / "boot_selector.c").exists()
+
+    scene_config = DESKTOP_SCENE_CONFIG.read_text(encoding="utf-8")
+    assert "ADD_SCENE(desktop, boot_selector, BootSelector)" in scene_config
+
+    main_scene = DESKTOP_MAIN_SCENE.read_text(encoding="utf-8")
+    for marker in (
+        "desktop_boot_selector_should_show()",
+        "DesktopMainEventShowBootSelector",
+        "scene_manager_next_scene(desktop->scene_manager, DesktopSceneBootSelector)",
+    ):
+        assert marker in main_scene, f"Desktop main lost selector handoff: {marker}"
+
+    boot_scene = DESKTOP_BOOT_SCENE.read_text(encoding="utf-8")
+    for marker in (
+        "DialogEx* dialog = desktop->mesh_pair_dialog",
+        'dialog_ex_set_left_button_text(dialog, "Flipper")',
+        'dialog_ex_set_right_button_text(dialog, "Bruce")',
+        "ESP_PARTITION_SUBTYPE_APP_OTA_1",
+        "esp_ota_set_boot_partition(target)",
+        "ESP_RST_TASK_WDT",
+        "ESP_RST_PANIC",
+        "scene_manager_previous_scene",
+        'DUAL_BOOT_NVS_NAMESPACE "dual_boot"',
+        'DUAL_BOOT_SKIP_ONCE_KEY "skip_once"',
+        "nvs_get_u8",
+        "nvs_erase_key",
+        "nvs_commit",
+        "desktop_boot_selector_consume_skip_once()",
+    ):
+        assert marker in boot_scene, f"Desktop selector lost safety marker: {marker}"
+
+    assert "view_dispatcher_alloc" not in boot_scene, (
+        "Selector must reuse Desktop's dispatcher; a second dispatcher caused the boot loop"
+    )
+
+
 def main() -> None:
     assert_partition_layout()
     assert_manual_flasher_contract()
     assert_bruce_patch_contract()
     assert_flipper_switch_contract()
+    assert_boot_selector_contract()
     print("Multiboot invariants passed.")
 
 
