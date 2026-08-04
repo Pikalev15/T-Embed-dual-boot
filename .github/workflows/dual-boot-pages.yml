@@ -1,9 +1,6 @@
 name: Build and Deploy T-Embed Dual-Boot Flasher
 
 on:
-  push:
-    branches:
-      - boot-selector
   pull_request:
     branches:
       - restore-bruce-dual-boot
@@ -34,7 +31,7 @@ jobs:
 
   build:
     name: Build both firmwares and package site
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
 
@@ -128,7 +125,6 @@ jobs:
           find _site -maxdepth 5 -type f -printf '%p %s bytes\n' | sort
 
       - name: Configure GitHub Pages
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/configure-pages@v5
 
       - name: Upload downloadable build artifact
@@ -140,7 +136,6 @@ jobs:
           retention-days: 30
 
       - name: Upload GitHub Pages artifact
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-pages-artifact@v4
         with:
           path: _site/
