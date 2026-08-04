@@ -28,7 +28,6 @@ APPS = [
     "loader_start",
     "notification_settings",
     "desktop",
-    "boot_selector",
     "archive",
     "about",
     "bt_settings",
