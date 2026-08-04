@@ -11,6 +11,9 @@ PARTITIONS = ROOT / "partitions_multiboot.csv"
 BUILD_SCRIPT = ROOT / "buildAndFlash_T-Embed.sh"
 PATCH_BRUCE = ROOT / "patchBruce.py"
 BRUCE_PATCH = ROOT / "tools" / "bruce_multiboot.patch"
+BRUCE_SELECTOR_PATCHER = ROOT / "tools" / "patch_bruce_boot_selector.py"
+BOOT_SELECTOR_MANIFEST = ROOT / "applications" / "services" / "boot_selector" / "application.fam"
+BOOT_SELECTOR_SOURCE = ROOT / "applications" / "services" / "boot_selector" / "boot_selector.c"
 FLASH_SIZE = 0x1000000
 
 
@@ -83,6 +86,8 @@ def assert_bruce_patch_contract() -> None:
     for marker in (
         'BRUCE_REPO_URL = "https://github.com/BruceDevices/firmware.git"',
         'PATCH_FILE = REPO_ROOT / "tools" / "bruce_multiboot.patch"',
+        'BOOT_SELECTOR_PATCHER = REPO_ROOT / "tools" / "patch_bruce_boot_selector.py"',
+        "run([sys.executable, str(BOOT_SELECTOR_PATCHER)])",
         'PARTITIONS_DST_NAME = "custom_16Mb.csv"',
         "shutil.copyfile(PARTITIONS_SRC",
     ):
@@ -96,6 +101,15 @@ def assert_bruce_patch_contract() -> None:
         "Reboot to Flipper",
     ):
         assert marker in patch, f"Bruce return-to-Flipper patch lost marker: {marker}"
+
+    selector_patcher = BRUCE_SELECTOR_PATCHER.read_text(encoding="utf-8")
+    for marker in (
+        "dualBootArmFlipperForNextReset",
+        "ESP_PARTITION_SUBTYPE_APP_OTA_0",
+        "esp_ota_set_boot_partition(flipper)",
+        "dualBootUpdaterResumeIfPending();",
+    ):
+        assert marker in selector_patcher, f"Bruce selector return hook lost marker: {marker}"
 
 
 def assert_flipper_switch_contract() -> None:
@@ -122,11 +136,33 @@ def assert_flipper_switch_contract() -> None:
     assert matches, "Flipper-side source no longer contains the switch to Bruce/ota_1"
 
 
+def assert_boot_selector_contract() -> None:
+    manifest = BOOT_SELECTOR_MANIFEST.read_text(encoding="utf-8")
+    for marker in (
+        'appid="boot_selector"',
+        "FlipperAppType.SERVICE",
+        'entry_point="boot_selector_srv"',
+        "order=210",
+    ):
+        assert marker in manifest, f"Boot selector manifest lost marker: {marker}"
+
+    source = BOOT_SELECTOR_SOURCE.read_text(encoding="utf-8")
+    for marker in (
+        "BOOT_SELECTOR_TIMEOUT_TICKS",
+        "ESP_PARTITION_SUBTYPE_APP_OTA_1",
+        "esp_ota_set_boot_partition(target)",
+        "Auto Flipper in %us",
+        "view_dispatcher_set_tick_event_callback",
+    ):
+        assert marker in source, f"Boot selector source lost marker: {marker}"
+
+
 def main() -> None:
     assert_partition_layout()
     assert_manual_flasher_contract()
     assert_bruce_patch_contract()
     assert_flipper_switch_contract()
+    assert_boot_selector_contract()
     print("Multiboot invariants passed.")
 
 
