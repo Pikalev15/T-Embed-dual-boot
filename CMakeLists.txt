@@ -26,5 +26,27 @@ if(_xt_ar AND _xt_objcopy AND EXISTS "${_wifi_lib}")
     endif()
 endif()
 
+# ---------------------------------------------------------------------------
+# Upstream's WiFi/SD updater creates an 8192-byte worker stack in internal RAM.
+# On the T-Embed, WiFi can fragment internal DRAM enough for xTaskCreate() to
+# fail with "Task spawn failed" despite several MiB of free PSRAM. Apply an
+# idempotent source patch that moves this worker stack to PSRAM and keeps a
+# smaller internal-RAM fallback. This does not touch the multiboot layout.
+# ---------------------------------------------------------------------------
+find_program(_python3 NAMES python3)
+if(NOT _python3)
+    message(FATAL_ERROR "python3 is required to patch the SD updater task")
+endif()
+execute_process(
+    COMMAND "${_python3}" "${CMAKE_SOURCE_DIR}/tools/patch_sd_updater_task.py"
+    RESULT_VARIABLE _sd_patch_rc
+    OUTPUT_VARIABLE _sd_patch_out
+    ERROR_VARIABLE _sd_patch_err)
+if(_sd_patch_rc EQUAL 0)
+    message(STATUS "${_sd_patch_out}")
+else()
+    message(FATAL_ERROR "SD updater task patch failed: ${_sd_patch_err}")
+endif()
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(furi_esp32)
