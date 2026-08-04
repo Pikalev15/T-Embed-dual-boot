@@ -3,6 +3,8 @@
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_system.h>
+#include <nvs.h>
+#include <nvs_flash.h>
 #include <stdio.h>
 
 #include "../desktop_i.h"
@@ -10,6 +12,8 @@
 
 #define TAG "DesktopBoot"
 #define BOOT_SELECTOR_HALF_SECONDS 8
+#define DUAL_BOOT_NVS_NAMESPACE "dual_boot"
+#define DUAL_BOOT_SKIP_ONCE_KEY "skip_once"
 
 static char s_countdown_text[48];
 
@@ -24,8 +28,42 @@ static const esp_partition_t* desktop_boot_selector_find_valid_ota(
     return partition;
 }
 
+static bool desktop_boot_selector_consume_skip_once(void) {
+    if(nvs_flash_init() != ESP_OK) {
+        FURI_LOG_W(TAG, "NVS unavailable; cannot consume direct-Flipper request");
+        return false;
+    }
+
+    nvs_handle_t handle;
+    if(nvs_open(DUAL_BOOT_NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
+        return false;
+    }
+
+    uint8_t skip_once = 0;
+    const esp_err_t get_result =
+        nvs_get_u8(handle, DUAL_BOOT_SKIP_ONCE_KEY, &skip_once);
+
+    if((get_result == ESP_OK) && (skip_once != 0)) {
+        /* Consume before Desktop starts. A later normal reset should show the
+         * selector again rather than permanently bypassing it. */
+        nvs_erase_key(handle, DUAL_BOOT_SKIP_ONCE_KEY);
+        nvs_commit(handle);
+        FURI_LOG_I(TAG, "consumed one-shot direct-Flipper request");
+    }
+
+    nvs_close(handle);
+    return (get_result == ESP_OK) && (skip_once != 0);
+}
+
 bool desktop_boot_selector_should_show(void) {
     if(desktop_boot_selector_find_valid_ota(ESP_PARTITION_SUBTYPE_APP_OTA_1) == NULL) {
+        return false;
+    }
+
+    /* Bruce's explicit "Reboot to Flipper" option writes this shared NVS flag.
+     * It bypasses only this boot; cold boots and ordinary resets still show the
+     * selector. */
+    if(desktop_boot_selector_consume_skip_once()) {
         return false;
     }
 
