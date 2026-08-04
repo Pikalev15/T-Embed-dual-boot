@@ -7,7 +7,8 @@ What it does (idempotent, safe to run before every build):
   3. resets the working tree to a pristine state
   4. re-applies tools/bruce_multiboot.patch (adds the "Flipper Zero" main-menu
      entry that reboots into the ota_0 slot — see 00_Skills/multi-boot.md)
-  5. copies partitions_multiboot.csv over Bruce's custom_16Mb.csv so both
+  5. patches Bruce so its next reset returns through the ota_0 startup selector
+  6. copies partitions_multiboot.csv over Bruce's custom_16Mb.csv so both
      firmwares are built against the exact same partition table
 
 Exits non-zero (loudly) if the pinned revision and patch are incompatible.
@@ -25,6 +26,7 @@ BRUCE_REPO_URL = "https://github.com/BruceDevices/firmware.git"
 # Bruce 1.16, verified with lilygo-t-embed-cc1101 and this patch.
 BRUCE_REVISION = "59e83bfbd8a63a6b67ea23498e15c710a1ed9657"
 PATCH_FILE = REPO_ROOT / "tools" / "bruce_multiboot.patch"
+BOOT_SELECTOR_PATCHER = REPO_ROOT / "tools" / "patch_bruce_boot_selector.py"
 PARTITIONS_SRC = REPO_ROOT / "partitions_multiboot.csv"
 PARTITIONS_DST_NAME = "custom_16Mb.csv"
 
@@ -69,6 +71,8 @@ def checkout_pinned_revision():
 def main():
     if not PATCH_FILE.is_file():
         sys.exit(f"error: missing patch file: {PATCH_FILE}")
+    if not BOOT_SELECTOR_PATCHER.is_file():
+        sys.exit(f"error: missing Bruce selector patcher: {BOOT_SELECTOR_PATCHER}")
     if not PARTITIONS_SRC.is_file():
         sys.exit(f"error: missing partition table: {PARTITIONS_SRC}")
 
@@ -111,7 +115,10 @@ def main():
             "Update BRUCE_REVISION and regenerate the patch together.\n"
         )
 
-    # 4) single-source the partition table
+    # 4) make the Flipper startup selector the next-boot front door while Bruce runs
+    run([sys.executable, str(BOOT_SELECTOR_PATCHER)])
+
+    # 5) single-source the partition table
     shutil.copyfile(PARTITIONS_SRC, BRUCE_DIR / PARTITIONS_DST_NAME)
     print(f"copied {PARTITIONS_SRC.name} -> multi-boot/bruce/{PARTITIONS_DST_NAME}")
 
