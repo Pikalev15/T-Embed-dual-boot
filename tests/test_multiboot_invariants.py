@@ -12,6 +12,7 @@ BUILD_SCRIPT = ROOT / "buildAndFlash_T-Embed.sh"
 PATCH_BRUCE = ROOT / "patchBruce.py"
 BRUCE_PATCH = ROOT / "tools" / "bruce_multiboot.patch"
 BRUCE_SELECTOR_PATCHER = ROOT / "tools" / "patch_bruce_boot_selector.py"
+FAM_CONFIG = ROOT / "fam_config.py"
 BOOT_SELECTOR_MANIFEST = ROOT / "applications" / "services" / "boot_selector" / "application.fam"
 BOOT_SELECTOR_SOURCE = ROOT / "applications" / "services" / "boot_selector" / "boot_selector.c"
 FLASH_SIZE = 0x1000000
@@ -137,22 +138,28 @@ def assert_flipper_switch_contract() -> None:
 
 
 def assert_boot_selector_contract() -> None:
+    fam_config = FAM_CONFIG.read_text(encoding="utf-8")
+    assert '"boot_selector"' in fam_config, "Boot selector is not included in fam_config.py APPS"
+
     manifest = BOOT_SELECTOR_MANIFEST.read_text(encoding="utf-8")
     for marker in (
         'appid="boot_selector"',
-        "FlipperAppType.SERVICE",
-        'entry_point="boot_selector_srv"',
+        "FlipperAppType.STARTUP",
+        'entry_point="boot_selector_startup"',
+        '"desktop"',
         "order=210",
     ):
         assert marker in manifest, f"Boot selector manifest lost marker: {marker}"
 
     source = BOOT_SELECTOR_SOURCE.read_text(encoding="utf-8")
     for marker in (
+        "void boot_selector_startup(void)",
         "BOOT_SELECTOR_TIMEOUT_TICKS",
         "ESP_PARTITION_SUBTYPE_APP_OTA_1",
         "esp_ota_set_boot_partition(target)",
         "Auto Flipper in %us",
         "view_dispatcher_set_tick_event_callback",
+        "furi_delay_ms(250)",
     ):
         assert marker in source, f"Boot selector source lost marker: {marker}"
 
