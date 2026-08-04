@@ -1,13 +1,17 @@
 #include <furi.h>
+#include <gui/modules/dialog_ex.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <esp_system.h>
+#include <stdio.h>
 
 #include "../desktop_i.h"
-#include "../views/desktop_view_boot_selector.h"
 #include "desktop_scene.h"
 
 #define TAG "DesktopBoot"
 #define BOOT_SELECTOR_HALF_SECONDS 8
+
+static char s_countdown_text[48];
 
 static const esp_partition_t* desktop_boot_selector_find_valid_ota(
     esp_partition_subtype_t subtype) {
@@ -20,13 +24,45 @@ static const esp_partition_t* desktop_boot_selector_find_valid_ota(
     return partition;
 }
 
-bool desktop_boot_selector_available(void) {
-    return desktop_boot_selector_find_valid_ota(ESP_PARTITION_SUBTYPE_APP_OTA_1) != NULL;
+bool desktop_boot_selector_should_show(void) {
+    if(desktop_boot_selector_find_valid_ota(ESP_PARTITION_SUBTYPE_APP_OTA_1) == NULL) {
+        return false;
+    }
+
+    /* Fail safe: if the previous boot died from a panic/watchdog, skip the
+     * selector once and let normal Flipper start so a bad selector cannot trap
+     * the device in a permanent boot loop. */
+    switch(esp_reset_reason()) {
+    case ESP_RST_PANIC:
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:
+        FURI_LOG_W(TAG, "skipping selector after crash/watchdog reset");
+        return false;
+    default:
+        return true;
+    }
 }
 
-static void desktop_boot_selector_callback(DesktopEvent event, void* context) {
+static void desktop_boot_selector_result_callback(DialogExResult result, void* context) {
     Desktop* desktop = context;
-    view_dispatcher_send_custom_event(desktop->view_dispatcher, event);
+    view_dispatcher_send_custom_event(desktop->view_dispatcher, (uint32_t)result);
+}
+
+static void desktop_boot_selector_update_text(Desktop* desktop, uint32_t half_seconds) {
+    const unsigned seconds = (half_seconds + 1u) / 2u;
+    snprintf(
+        s_countdown_text,
+        sizeof(s_countdown_text),
+        "Choose firmware\nAuto Flipper in %us",
+        seconds);
+    dialog_ex_set_text(
+        desktop->mesh_pair_dialog,
+        s_countdown_text,
+        64,
+        31,
+        AlignCenter,
+        AlignCenter);
 }
 
 static void desktop_boot_selector_continue_flipper(Desktop* desktop) {
@@ -57,37 +93,36 @@ static void desktop_boot_selector_launch_bruce(Desktop* desktop) {
 void desktop_scene_boot_selector_on_enter(void* context) {
     Desktop* desktop = context;
 
-    if(!desktop_boot_selector_available()) {
+    if(!desktop_boot_selector_should_show()) {
         desktop_boot_selector_continue_flipper(desktop);
         return;
     }
 
     scene_manager_set_scene_state(
         desktop->scene_manager, DesktopSceneBootSelector, BOOT_SELECTOR_HALF_SECONDS);
-    desktop_boot_selector_set_callback(
-        desktop->boot_selector_view, desktop_boot_selector_callback, desktop);
-    desktop_boot_selector_reset(
-        desktop->boot_selector_view, true, BOOT_SELECTOR_HALF_SECONDS);
-    view_dispatcher_switch_to_view(
-        desktop->view_dispatcher, DesktopViewIdBootSelector);
+
+    DialogEx* dialog = desktop->mesh_pair_dialog;
+    dialog_ex_reset(dialog);
+    dialog_ex_set_header(dialog, "DUAL BOOT", 64, 8, AlignCenter, AlignTop);
+    desktop_boot_selector_update_text(desktop, BOOT_SELECTOR_HALF_SECONDS);
+    dialog_ex_set_left_button_text(dialog, "Flipper");
+    dialog_ex_set_right_button_text(dialog, "Bruce");
+    dialog_ex_set_context(dialog, desktop);
+    dialog_ex_set_result_callback(dialog, desktop_boot_selector_result_callback);
+
+    view_dispatcher_switch_to_view(desktop->view_dispatcher, DesktopViewIdMeshPair);
 }
 
 bool desktop_scene_boot_selector_on_event(void* context, SceneManagerEvent event) {
     Desktop* desktop = context;
 
     if(event.type == SceneManagerEventTypeCustom) {
-        if(event.event == DesktopBootSelectorEventConfirm) {
-            const DesktopBootChoice choice =
-                desktop_boot_selector_get_choice(desktop->boot_selector_view);
-            if(choice == DesktopBootChoiceBruce) {
-                desktop_boot_selector_launch_bruce(desktop);
-            } else {
-                desktop_boot_selector_continue_flipper(desktop);
-            }
+        if(event.event == DialogExResultRight) {
+            desktop_boot_selector_launch_bruce(desktop);
             return true;
         }
-
-        if(event.event == DesktopBootSelectorEventCancel) {
+        if((event.event == DialogExResultLeft) ||
+           (event.event == DialogExResultCenter)) {
             desktop_boot_selector_continue_flipper(desktop);
             return true;
         }
@@ -97,8 +132,7 @@ bool desktop_scene_boot_selector_on_event(void* context, SceneManagerEvent event
         if(ticks > 0) ticks--;
         scene_manager_set_scene_state(
             desktop->scene_manager, DesktopSceneBootSelector, ticks);
-        desktop_boot_selector_set_countdown(
-            desktop->boot_selector_view, (uint8_t)ticks);
+        desktop_boot_selector_update_text(desktop, ticks);
 
         if(ticks == 0) {
             desktop_boot_selector_continue_flipper(desktop);
@@ -114,5 +148,5 @@ bool desktop_scene_boot_selector_on_event(void* context, SceneManagerEvent event
 
 void desktop_scene_boot_selector_on_exit(void* context) {
     Desktop* desktop = context;
-    desktop_boot_selector_set_callback(desktop->boot_selector_view, NULL, NULL);
+    dialog_ex_reset(desktop->mesh_pair_dialog);
 }
