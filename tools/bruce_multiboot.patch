@@ -125,7 +125,7 @@ diff --git a/src/main.cpp b/src/main.cpp
  #include <globals.h>
 +#include <esp_ota_ops.h>
  
-@@ -450,8 +451,14 @@ void setup() {
+@@ -450,7 +451,13 @@ void setup() {
          SAFE_STACK_BUFFER_SIZE / 4
      ); // Must be invoked before Serial.begin(). Default is 256 chars
      Serial.begin(115200);
