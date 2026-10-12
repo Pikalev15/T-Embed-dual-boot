@@ -30,7 +30,7 @@ new file mode 100644
 index 00000000..8ac06cfd
 --- /dev/null
 +++ b/src/core/menu_items/FlipperOsMenu.cpp
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,57 @@
 +// --- Multi-boot add-on (not part of upstream Bruce) ---------------------------
 +// "Flipper Zero" main-menu entry: reboots into the Flipper Zero firmware that
 +// lives in the ota_0 partition (this firmware lives in ota_1). Created by
@@ -49,8 +49,11 @@ index 00000000..8ac06cfd
 +static void rebootToFlipperOs(void) {
 +    const esp_partition_t *target =
 +        esp_partition_find_first(ESP_PARTITION_TYPE_APP, FLIPPEROS_TARGET_SUBTYPE, NULL);
-+    if (target == NULL) {
-+        displayError("No ota_0 partition.\nNot a multi-boot image.", true);
++    esp_app_desc_t desc;
++    if (target == NULL || target->address != 0x20000 ||
++        target->size != 0x500000 ||
++        esp_ota_get_partition_description(target, &desc) != ESP_OK) {
++        displayError("Flipper image missing or invalid.", true);
 +        return;
 +    }
 +    if (esp_ota_set_boot_partition(target) != ESP_OK) {
