@@ -91,6 +91,19 @@ static void loader_menu_bruce_callback(void* context, uint32_t index) {
     if(answer == DialogMessageButtonRight) {
         esp_err_t err = esp_ota_set_boot_partition(bruce);
         if(err == ESP_OK) {
+            const esp_partition_t* selected = esp_ota_get_boot_partition();
+            if(!selected || selected->address != bruce->address) {
+                FURI_LOG_E(TAG, "OTA selection failed: expected Bruce 0x%lx, read 0x%lx",
+                           (unsigned long)bruce->address,
+                           selected ? (unsigned long)selected->address : 0UL);
+                dialog_message_set_header(dialog, "Boot selection error", 64, 8, AlignCenter, AlignTop);
+                dialog_message_set_text(dialog, "OTA state did not stick", 64, 30, AlignCenter, AlignCenter);
+                dialog_message_set_buttons(dialog, NULL, "OK", NULL);
+                dialog_message_show(dialogs, dialog);
+                dialog_message_free(dialog);
+                furi_record_close(RECORD_DIALOGS);
+                return;
+            }
             dialog_message_free(dialog);
             furi_record_close(RECORD_DIALOGS);
             FURI_LOG_I(TAG, "Switching to Bruce at 0x%lx", (unsigned long)bruce->address);
