@@ -11,6 +11,8 @@
 
 #define TAG "DesktopSrv"
 
+static bool s_boot_selector_queued = false;
+
 static void desktop_scene_main_new_idle_animation_callback(void* context) {
     furi_assert(context);
     Desktop* desktop = context;
@@ -108,6 +110,12 @@ void desktop_scene_main_on_enter(void* context) {
     desktop_main_set_callback(main_view, desktop_scene_main_callback, desktop);
 
     view_dispatcher_switch_to_view(desktop->view_dispatcher, DesktopViewIdMain);
+
+    /* Reuse Desktop's running dispatcher: no second startup app/dispatcher. */
+    if(!s_boot_selector_queued && desktop_boot_selector_should_show()) {
+        s_boot_selector_queued = true;
+        view_dispatcher_send_custom_event(desktop->view_dispatcher, DesktopMainEventShowBootSelector);
+    }
 }
 
 bool desktop_scene_main_on_event(void* context, SceneManagerEvent event) {
@@ -116,6 +124,11 @@ bool desktop_scene_main_on_event(void* context, SceneManagerEvent event) {
 
     if(event.type == SceneManagerEventTypeCustom) {
         switch(event.event) {
+        case DesktopMainEventShowBootSelector:
+            scene_manager_next_scene(desktop->scene_manager, DesktopSceneBootSelector);
+            consumed = true;
+            break;
+
         case DesktopMainEventOpenMenu: {
             Loader* loader = furi_record_open(RECORD_LOADER);
             loader_show_menu(loader);
