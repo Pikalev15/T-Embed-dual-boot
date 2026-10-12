@@ -20,6 +20,7 @@
 #include <lwip/netif.h>
 #include <lwip/tcpip.h>
 #include <esp_netif.h>
+#include <esp_netif_net_stack.h> /* esp_netif_get_netif_impl() in ESP-IDF 5.4.1 */
 
 #define TAG "PrintHijack"
 
