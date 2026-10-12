@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>T-Embed Dual-Boot Web Flasher</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;color:#eaf0f9;background:#0c1421}
+body{margin:0;background:radial-gradient(ellipse at top,#253956,#0c1421 65%);min-height:100vh}
+main{margin:auto;max-width:740px;padding:50px 20px 80px}h1{font-size:clamp(2.2rem,6vw,3.5rem);letter-spacing:-1px;margin:4px 0}
+p,li{line-height:1.65;color:#becbdd}h2{margin:0}.eyebrow{color:#8dbaff;text-transform:uppercase;letter-spacing:2px;font-size:13px;font-weight:bold}
+.panel{background:#152134;border:1px solid #38506a;padding:24px;border-radius:15px;margin-top:23px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.slot{padding:17px;border-radius:8px;background:#22354f}.slot b{display:block}.slot small{color:#bdcbde}
+.warn{padding:12px 18px;border-left:4px solid #ffc475;background:#342d24;color:#ffe3b5}
+button{padding:13px 19px;background:#8cbaff;color:#081424;border:0;border-radius:9px;font-weight:bold;font-size:15px;margin:8px 8px 8px 0;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}a{color:#9cc7ff}progress{width:100%;height:17px;accent-color:#8cbaff}
+#status{background:#0b1625;padding:16px;border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;min-height:55px}
+input{vertical-align:middle}footer{margin-top:24px;font-size:13px}
+@media(max-width:480px){.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<div class="eyebrow">LilyGO T-Embed CC1101 / CC1101 Plus · ESP32-S3 16MB</div>
+<h1>Flipper + Bruce<br>Dual-Boot Flasher</h1>
+<p>Official Sor3nt Flipper features combined with Bruce 1.16.1. This browser flasher verifies BOTH images and the custom flash partition table before flashing.</p>
+<section class="panel"><h2>Firmware slots</h2><div class="grid"><div class="slot"><b>Flipper ESP32</b><small>ota_0 · 0x020000</small></div><div class="slot"><b>Bruce 1.16.1</b><small>ota_1 · 0x520000</small></div></div>
+<p>Use desktop Chrome or Edge and a USB data cable. Not compatible with other ESP32 boards.</p></section>
+<section class="panel"><h2>Safety first</h2><p class="warn">Experimental firmware: not yet physically boot-tested. Flashing rewrites the bootloader and partition layout. Back up your SD card and ensure you can recover your device over USB.</p>
+<p>Don't use the upstream single-OS web flasher, qT-Embed Full Flash, or firmware OTA updater on this dual-boot layout. This tool writes both OSes and resets the boot selection to Flipper. NVS and Bruce SPIFFS are not intentionally erased.</p>
+<label><input type="checkbox" id="ack"> I have backed up my data and understand the risks.</label></section>
+<section class="panel"><h2>Flash both systems</h2><p>First validate the live build package. Flashing is disabled if images or checksums are missing.</p>
+<button id="verify">1. Verify files</button><button id="flash" disabled>2. Connect and flash</button>
+<p id="package">Firmware package not checked.</p><progress id="progress" max="100" value="0"></progress>
+<div role="status" aria-live="polite" id="status">Ready to verify firmware.</div></section>
+<footer><a href="https://github.com/Pikalev15/T-Embed-dual-boot">Source repository</a> · <a href="https://github.com/Pikalev15/T-Embed-dual-boot/actions/workflows/dualboot-firmware.yml">Firmware build</a> · <a href="https://github.com/Pikalev15/T-Embed-dual-boot/blob/main/DUALBOOT_LATEST.md">Instructions</a></footer>
+</main>
+<script type="module">
+import {ESPLoader,Transport} from "https://unpkg.com/esptool-js@0.5.4/bundle.js";
+const el=id=>document.getElementById(id);
+const files=[["bootloader/bootloader.bin",0x0,0x8000],["partition_table/partition-table.bin",0x8000,0x1000],["furi_esp32.bin",0x20000,0x500000],["bruce.bin",0x520000,0x500000]];
+const expected={nvs:[0x9000,0x6000,1,2],otadata:[0xf000,0x2000,1,0],phy_init:[0x11000,0x1000,1,1],ota_0:[0x20000,0x500000,0,16],ota_1:[0x520000,0x500000,0,17],spiffs:[0xa20000,0x5c0000,1,130],coredump:[0xfe0000,0x20000,1,3]};
+let prepared=null,busy=false;
+const status=t=>el("status").textContent=t;
+const refresh=()=>el("flash").disabled=busy||!prepared||!el("ack").checked;
+el("ack").onchange=refresh;
+function validatePartitions(bytes){
+  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),found={},decoder=new TextDecoder();
+  for(let pos=0;pos+32<=bytes.length;pos+=32){
+    const magic=v.getUint16(pos,true);
+    if(magic===0xffff||magic===0xebeb)break;
+    if(magic!==0x50aa)throw Error("Invalid partition binary");
+    const label=decoder.decode(bytes.subarray(pos+12,pos+28)).split("\0")[0];
+    if(label in found)throw Error("Duplicate partition "+label);
+    found[label]=[v.getUint32(pos+4,true),v.getUint32(pos+8,true),v.getUint8(pos+2),v.getUint8(pos+3)];
+  }
+  if(JSON.stringify(Object.keys(found).sort())!==JSON.stringify(Object.keys(expected).sort()))throw Error("Unexpected partition table");
+  for(const label of Object.keys(expected)){
+    if(JSON.stringify(found[label])!==JSON.stringify(expected[label]))throw Error("Wrong partition "+label);
+  }
+}
+function binary(bytes){
+  const parts=[];for(let i=0;i<bytes.length;i+=16384)parts.push(String.fromCharCode(...bytes.subarray(i,i+16384)));
+  return parts.join("");
+}
+async function sha256(bytes){
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+el("verify").onclick=async()=>{
+  if(busy)return;busy=true;prepared=null;refresh();el("verify").disabled=true;
+  try{
+    status("Loading the firmware manifest...");
+    const res=await fetch("./firmware/manifest.json",{cache:"no-store"});
+    if(!res.ok)throw Error("Missing firmware package: HTTP "+res.status);
+    const manifest=await res.json();
+    if(manifest.board!=="lilygo-t-embed-cc1101"||!manifest.sha256)throw Error("Wrong firmware manifest");
+    const images=[];
+    for(const [path,address,max] of files){
+      status("Checking "+path+"...");
+      const response=await fetch("./firmware/"+path,{cache:"no-store"});
+      if(!response.ok)throw Error("Missing "+path+": HTTP "+response.status);
+      const bytes=new Uint8Array(await response.arrayBuffer());
+      if(!bytes.length||bytes.length>max)throw Error("Invalid image size: "+path);
+      const sum=manifest.sha256[path];
+      if(!sum||! /^[a-f0-9]{64}$/i.test(sum)||(await sha256(bytes)).toLowerCase()!==sum.toLowerCase())throw Error("SHA256 mismatch: "+path);
+      if(path.includes("partition-table"))validatePartitions(bytes);
+      if(path.endsWith(".bin")&&(path==="furi_esp32.bin"||path==="bruce.bin")&&bytes[0]!==0xe9)throw Error("Not an ESP32 image: "+path);
+      images.push({address,data:bytes,path});
+    }
+    prepared=images;
+    el("package").textContent="Verified "+(images.reduce((s,x)=>s+x.data.length,0)/1048576).toFixed(2)+" MiB of firmware.";
+    status("Package verified. Acknowledge the safety notice, then connect.");
+  }catch(e){el("package").textContent="No flash possible until verification passes.";status("Cannot flash: "+e.message)}
+  finally{busy=false;el("verify").disabled=false;refresh()}
+};
+el("flash").onclick=async()=>{
+  if(busy||!prepared||!el("ack").checked)return;
+  if(!navigator.serial){status("Web Serial requires Chrome/Edge desktop over HTTPS.");return}
+  if(!confirm("FLASH BOTH operating systems and replace the partition table?"))return;
+  busy=true;refresh();el("verify").disabled=true;
+  try{
+    const port=await navigator.serial.requestPort();
+    const transport=new Transport(port,true);
+    const loader=new ESPLoader({transport,baudrate:460800,romBaudrate:115200,terminal:{clean(){},writeLine(s){console.log(s)},write(s){console.log(s)}}});
+    status("Connecting to ESP32-S3...");await loader.main();await loader.flashId();
+    const name=String(loader.chip?.CHIP_NAME||"");
+    if(name&&name!=="ESP32-S3")throw Error("Wrong chip: "+name);
+    const flashFiles=prepared.map(x=>({address:x.address,data:binary(x.data)}));
+    status("Flashing both images...");
+    await loader.writeFlash({fileArray:flashFiles,flashMode:"dio",flashFreq:"80m",flashSize:"16MB",eraseAll:false,compress:true,
+      reportProgress:(i,w,t)=>{const p=t?Math.round(100*w/t):0;el("progress").value=Math.round((i+p/100)*23.5);status("Writing "+(prepared[i]?.path||"firmware")+" "+p+"%")}
+    });
+    status("Resetting OTA selection to Flipper...");
+    await loader.writeFlash({fileArray:[{address:0xf000,data:"\xFF".repeat(0x2000)}],flashMode:"dio",flashFreq:"80m",flashSize:"16MB",eraseAll:false,compress:false});
+    el("progress").value=100;status("Success: Flipper and Bruce flashed. Reset device and use the Flipper lock menu to switch to Bruce.");
+    try{await transport.setDTR(false);await transport.setRTS(true);await new Promise(r=>setTimeout(r,100));await transport.setRTS(false)}catch(e){console.warn("Manual reset required",e)}
+  }catch(e){console.error(e);status("Flash failed: "+e.message+". Do not assume the device is bootable. Retry the complete flash or recover over USB.");}
+  finally{busy=false;el("verify").disabled=false;refresh()}
+};
+</script></body></html>
