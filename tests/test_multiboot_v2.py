@@ -50,6 +50,10 @@ class MultiBootV2Tests(unittest.TestCase):
         self.assertIn('esp_ota_set_boot_partition(bruce)', menu)
         self.assertIn('esp_restart();', menu)
         self.assertIn('Boot Bruce OS?', menu)
+        self.assertIn('esp_ota_get_boot_partition()', menu)
+        self.assertIn('OTA state did not stick', menu)
+        self.assertIn('[DualBoot][Flipper]', self.read("main/app_main.c"))
+        self.assertIn('[DualBoot] app=', self.read("tools/bruce_multiboot.patch"))
 
     def test_bruce_return_menu_rejects_invalid_flipper(self):
         patch = self.read("tools/bruce_multiboot.patch")
