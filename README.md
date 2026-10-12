@@ -1,3 +1,5 @@
+> **Experimental T-Embed dual boot (latest Sor3nt upstream + Bruce 1.16.1):** this branch contains the full updated Sor3nt port (including post-v2.0.0 changes) plus two-way switching with Bruce. **Do not use upstream single-firmware flashers or the Flipper firmware OTA updater** on this layout. Use the verified two-image bundle and [dual-boot instructions](DUALBOOT_LATEST.md). Not hardware validated yet.
+
 > [!CAUTION]
 > ## 🚨 SECURITY WARNING — DO NOT FLASH "L15Dev" FIRMWARE 🚨
 >
