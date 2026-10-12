@@ -108,6 +108,18 @@ def main():
             "Update BRUCE_REVISION and regenerate the patch together.\n"
         )
 
+    # Pin to upstream's documented FastLED 3.10.3 rather than using the
+    # caret constraint, which currently resolves to 3.10.7. That release
+    # adds a C++ FP symbol incompatible with this board's '#define FP 1'.
+    # Keep the fix isolated to the prepared Bruce checkout, not upstream.
+    pio_config = BRUCE_DIR / "platformio.ini"
+    original = pio_config.read_text(encoding="utf-8")
+    old_dep = "fastled/FastLED @^3.10.3"
+    new_dep = "fastled/FastLED @3.10.3"
+    if old_dep not in original:
+        sys.exit("error: Bruce FastLED dependency changed upstream; review version pin")
+    pio_config.write_text(original.replace(old_dep, new_dep), encoding="utf-8")
+
     # 4) single-source the partition table
     shutil.copyfile(PARTITIONS_SRC, BRUCE_DIR / PARTITIONS_DST_NAME)
     print(f"copied {PARTITIONS_SRC.name} -> multi-boot/bruce/{PARTITIONS_DST_NAME}")
