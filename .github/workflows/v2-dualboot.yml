@@ -1,0 +1,27 @@
+name: Dual-boot v2 integration checks
+on:
+  push:
+    branches: [flipper-v2-dualboot-rebuild]
+  pull_request:
+    branches: [restore-bruce-dual-boot]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Flipper and multiboot source
+        run: |
+          python3 -m unittest discover -s tests -p test_multiboot_v2.py -v
+          python3 -m py_compile patchBruce.py
+          bash -n buildAndFlash_T-Embed.sh
+      - name: Verify Bruce 1.16.1 patch applies to pinned upstream
+        run: |
+          git clone --depth 1 --filter=blob:none --branch 1.16.1 https://github.com/BruceDevices/firmware.git bruce-v2-check
+          test "$(git -C bruce-v2-check rev-parse HEAD)" = "ba519c936c87b89c9c667c15b932d7faca5360d5"
+          git -C bruce-v2-check apply --check ../tools/bruce_multiboot.patch
