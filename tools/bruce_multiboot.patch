@@ -30,7 +30,7 @@ new file mode 100644
 index 00000000..8ac06cfd
 --- /dev/null
 +++ b/src/core/menu_items/FlipperOsMenu.cpp
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,56 @@
 +// --- Multi-boot add-on (not part of upstream Bruce) ---------------------------
 +// "Flipper Zero" main-menu entry: reboots into the Flipper Zero firmware that
 +// lives in the ota_0 partition (this firmware lives in ota_1). Created by
