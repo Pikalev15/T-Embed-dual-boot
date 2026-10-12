@@ -6,8 +6,8 @@ What it does (idempotent, safe to run before every build):
   2. checks out the pinned, verified Bruce revision
   3. resets the working tree to a pristine state
   4. re-applies tools/bruce_multiboot.patch (adds the "Flipper Zero" main-menu
-     entry that reboots into the ota_0 slot — see 00_Skills/multi-boot.md)
-  5. patches Bruce so its next reset returns through the ota_0 startup selector
+     entry that reboots into ota_0)
+  5. patches only the next-reset selector path and one-shot Flipper return
   6. copies partitions_multiboot.csv over Bruce's custom_16Mb.csv so both
      firmwares are built against the exact same partition table
 
