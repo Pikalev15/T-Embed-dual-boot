@@ -121,7 +121,7 @@ void app_main(void) {
     const esp_partition_t* running_app = esp_ota_get_running_partition();
     const esp_partition_t* selected_app = esp_ota_get_boot_partition();
     esp_rom_printf(
-        "\\r\\n[DualBoot][Flipper] running=%s@0x%lx selected=%s@0x%lx reset=%d\\r\\n",
+        "\r\n[DualBoot][Flipper] running=%s@0x%lx selected=%s@0x%lx reset=%d\r\n",
         running_app ? running_app->label : "(none)",
         running_app ? (unsigned long)running_app->address : 0UL,
         selected_app ? selected_app->label : "(none)",
