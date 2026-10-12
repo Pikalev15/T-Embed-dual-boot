@@ -1,3 +1,5 @@
+> **Experimental dual-boot fork:** This branch combines Sor3nt v2.0.0 with Bruce 1.16.1 for the T-Embed CC1101. See [DUALBOOT_V2.md](DUALBOOT_V2.md) before flashing. Its firmware OTA updater is deliberately disabled to protect Bruce; do not use the normal full-flash/webflasher packages. Not hardware-tested yet.
+
 > [!CAUTION]
 > ## 🚨 SECURITY WARNING — DO NOT FLASH "L15Dev" FIRMWARE 🚨
 >
