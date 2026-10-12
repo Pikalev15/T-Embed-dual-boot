@@ -1,0 +1,81 @@
+name: Build T-Embed Dual Boot (Flipper latest + Bruce 1.16.1)
+
+on:
+  push:
+    branches: [flipper-v2-dualboot-latest]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dualboot:
+    name: Compile and package both firmware images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout latest dual-boot source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check source invariants
+        run: |
+          python3 -m unittest discover -s tests -p test_multiboot_v2.py -v
+          python3 -m py_compile patchBruce.py tools/flash_dualboot.py
+          bash -n buildAndFlash_T-Embed.sh
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git wget flex bison gperf python3 python3-pip python3-venv \
+            cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 \
+            libglib2.0-dev pipx
+
+      - name: Install ESP-IDF 5.4.1
+        run: |
+          mkdir -p ~/esp
+          git clone --depth 1 --branch v5.4.1 https://github.com/espressif/esp-idf.git ~/esp/esp-idf
+          ~/esp/esp-idf/install.sh esp32s3
+
+      - name: Install PlatformIO
+        run: |
+          pipx install platformio
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build both firmwares and check slots
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          bash ./buildAndFlash_T-Embed.sh --build-only
+
+      - name: Package validated dual-boot bundle
+        run: |
+          mkdir -p artifact_staging/bootloader artifact_staging/partition_table
+          cp build_t_embed/furi_esp32.bin artifact_staging/furi_esp32.bin
+          cp build_t_embed/bootloader/bootloader.bin artifact_staging/bootloader/bootloader.bin
+          cp build_t_embed/partition_table/partition-table.bin artifact_staging/partition_table/partition-table.bin
+          cp multi-boot/bruce/.pio/build/lilygo-t-embed-cc1101/firmware.bin artifact_staging/bruce.bin
+          cp tools/flash_dualboot.py artifact_staging/flash_dualboot.py
+          cp DUALBOOT_LATEST.md artifact_staging/README.md
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          p = Path("artifact_staging")
+          entries = ["bootloader/bootloader.bin", "partition_table/partition-table.bin", "furi_esp32.bin", "bruce.bin"]
+          (p / "manifest.json").write_text(json.dumps({
+              "firmware": "Sor3nt latest + Bruce 1.16.1 dual-boot",
+              "board": "lilygo-t-embed-cc1101",
+              "sha256": {e: hashlib.sha256((p / e).read_bytes()).hexdigest() for e in entries}
+          }, indent=2) + "\n")
+          PY
+          python3 tools/flash_dualboot.py --bundle artifact_staging --dry-run
+
+      - name: Upload complete dual-boot flasher bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: t-embed-dualboot-flasher
+          path: artifact_staging/
+          if-no-files-found: error
+          retention-days: 30
