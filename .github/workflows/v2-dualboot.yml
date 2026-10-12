@@ -3,7 +3,7 @@ on:
   push:
     branches: [flipper-v2-dualboot-rebuild]
   pull_request:
-    branches: [restore-bruce-dual-boot]
+    branches: [flipper-v2-upstream]
   workflow_dispatch:
 
 permissions:
