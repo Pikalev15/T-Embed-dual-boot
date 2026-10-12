@@ -24,6 +24,15 @@ jobs:
       - name: Check source invariants
         run: |
           python3 -m unittest discover -s tests -p test_multiboot_v2.py -v
+          python3 -m unittest discover -s tests -p test_pages_flasher.py -v
+          python3 - <<'PY'
+          import pathlib, re
+          page = pathlib.Path('pages/index.html').read_text()
+          script = re.search(r'<script type="module">(.*?)</script>', page, re.S)
+          if not script: raise SystemExit('Missing Web Serial script')
+          pathlib.Path('/tmp/t-embed-flasher.mjs').write_text(script.group(1))
+          PY
+          node --check /tmp/t-embed-flasher.mjs
           python3 -m py_compile patchBruce.py tools/flash_dualboot.py
           bash -n buildAndFlash_T-Embed.sh
 
