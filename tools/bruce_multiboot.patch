@@ -117,4 +117,25 @@ index 00000000..f98b5430
 +};
 +
 +#endif // __FLIPPEROS_MENU_H__
-
+diff --git a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1,3 +1,4 @@
+ #include "core/main_menu.h"
+ #include <globals.h>
++#include <esp_ota_ops.h>
+ 
+@@ -450,8 +451,14 @@ void setup() {
+         SAFE_STACK_BUFFER_SIZE / 4
+     ); // Must be invoked before Serial.begin(). Default is 256 chars
+     Serial.begin(115200);
++    const esp_partition_t* running_app = esp_ota_get_running_partition();
++    Serial.printf("[DualBoot] app=%s offset=0x%lx reset=%d\\n",
++                  running_app ? running_app->label : "(none)",
++                  running_app ? (unsigned long)running_app->address : 0UL,
++                  (int)esp_reset_reason());
++    Serial.flush();
+ 
+     log_d("Total heap: %d", ESP.getHeapSize());
+     log_d("Free heap: %d", ESP.getFreeHeap());
+     bool psramStarted = psramInit();
