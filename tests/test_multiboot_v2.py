@@ -56,6 +56,11 @@ class MultiBootV2Tests(unittest.TestCase):
         self.assertNotIn("skip_once", patch)
         self.assertNotIn("dualBootUpdaterResumeIfPending", preparer)
 
+    def test_bruce_fastled_version_is_pinned(self):
+        preparer = self.read("patchBruce.py")
+        self.assertIn("fastled/FastLED @3.10.3", preparer)
+        self.assertIn("fastled/FastLED @^3.10.3", preparer)
+
     def test_toolchain_partition_config(self):
         self.assertIn("partitions_multiboot.csv", self.read("sdkconfig.defaults.esp32s3"))
         self.assertIn("partitions_multiboot.csv", self.read("sdkconfig"))
