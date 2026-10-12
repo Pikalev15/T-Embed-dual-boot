@@ -1,3 +1,20 @@
+# T-Embed CC1101 dual boot — Flipper 2.0.0 + Bruce 1.16.1
+
+> **EXPERIMENTAL / NOT READY TO FLASH.** This branch is based on Sor3nt's tagged
+> Flipper 2.0.0 tree and uses Bruce 1.16.1, but the combined image still needs
+> a clean dual build and real-device validation.
+>
+> **Do not use Flipper's stock OTA firmware updater or qT-Embed Full Flash.**
+> Their standard partition assumptions conflict with Bruce installed in ota_1.
+> The native Flipper OTA write path is blocked on this dual-boot layout. A full
+> upstream flash overwrites the dual-boot partition table or Bruce.
+>
+> **Dual boot setup and testing:** [DUAL_BOOT_V2.md](DUAL_BOOT_V2.md).
+
+---
+
+## Sor3nt upstream Flipper v2.0.0 documentation
+
 > [!CAUTION]
 > ## 🚨 SECURITY WARNING — DO NOT FLASH "L15Dev" FIRMWARE 🚨
 >
