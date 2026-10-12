@@ -1,5 +1,8 @@
 #include <furi.h>
 #include <gui/scene_manager.h>
+#include <dialogs/dialogs.h>
+#include <esp_partition.h>
+#include <esp_ota_ops.h>
 
 #include <btshim.h>
 #include <wifi.h>
@@ -22,6 +25,38 @@
 void desktop_scene_lock_menu_callback(DesktopEvent event, void* context) {
     Desktop* desktop = (Desktop*)context;
     view_dispatcher_send_custom_event(desktop->view_dispatcher, event);
+}
+
+
+/* Dual boot: only offer Bruce if ota_1 holds a valid ESP32 application. */
+static const esp_partition_t* desktop_bruce_partition(void) {
+    const esp_partition_t* partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    if(partition == NULL) return NULL;
+    esp_app_desc_t description;
+    if(esp_ota_get_partition_description(partition, &description) != ESP_OK) return NULL;
+    return partition;
+}
+
+static void desktop_bruce_switch_confirmed(void) {
+    const esp_partition_t* partition = desktop_bruce_partition();
+    if(partition == NULL) return;
+    DialogsApp* dialogs = furi_record_open(RECORD_DIALOGS);
+    DialogMessage* msg = dialog_message_alloc();
+    dialog_message_set_header(msg, "Switch to Bruce?", 64, 8, AlignCenter, AlignTop);
+    dialog_message_set_text(msg, "Restart into Bruce?\\nUnsaved work is lost.", 64, 31, AlignCenter, AlignCenter);
+    dialog_message_set_buttons(msg, "Cancel", NULL, "Restart");
+    DialogMessageButton answer = dialog_message_show(dialogs, msg);
+    dialog_message_free(msg);
+    furi_record_close(RECORD_DIALOGS);
+    if(answer != DialogMessageButtonRight) return;
+    esp_err_t result = esp_ota_set_boot_partition(partition);
+    if(result != ESP_OK) {
+        FURI_LOG_E("DualBoot", "Could not select Bruce: %s", esp_err_to_name(result));
+        return;
+    }
+    furi_delay_ms(100);
+    furi_hal_power_reset();
 }
 
 static bool desktop_lock_menu_bt_enabled(void) {
@@ -56,7 +91,8 @@ void desktop_scene_lock_menu_refresh(Desktop* desktop) {
         LOCK_MENU_USB_AVAILABLE,
         qflipper_bridge_is_active(),
         desktop_lock_menu_bt_enabled(),
-        desktop_lock_menu_wifi_enabled());
+        desktop_lock_menu_wifi_enabled(),
+        desktop_bruce_partition() != NULL);
 }
 
 void desktop_scene_lock_menu_on_enter(void* context) {
@@ -136,6 +172,11 @@ bool desktop_scene_lock_menu_on_event(void* context, SceneManagerEvent event) {
             /* T-Embed ist immer Master; der Master-Mesh-Service läuft on-demand in
              * der Mesh-Clients-Scene. */
             scene_manager_next_scene(desktop->scene_manager, DesktopSceneMeshClients);
+            consumed = true;
+            break;
+
+        case DesktopLockMenuEventBruce:
+            desktop_bruce_switch_confirmed();
             consumed = true;
             break;
 
