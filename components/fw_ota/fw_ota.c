@@ -54,8 +54,15 @@ static void fw_ota_trim(char* s) {
     if(start) memmove(s, s + start, strlen(s + start) + 1);
 }
 
+/* Shared spiffs partition marks our Bruce+Flipper layout. Never let the
+ * regular Flipper OTA / USB-RPC updater overwrite the Bruce OTA slot. */
+static bool fw_ota_is_multiboot(void) {
+    return esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, NULL) != NULL;
+}
+
 bool fw_ota_is_supported(void) {
-    return esp_ota_get_next_update_partition(NULL) != NULL;
+    return !fw_ota_is_multiboot() && esp_ota_get_next_update_partition(NULL) != NULL;
 }
 
 const char* fw_ota_running_partition_label(void) {
@@ -152,6 +159,10 @@ bool fw_ota_flash_file(
     void* progress_ctx,
     char* err,
     size_t err_size) {
+    if(!fw_ota_is_supported()) {
+        fw_ota_set_err(err, err_size, "Flipper OTA disabled in Bruce dual-boot layout");
+        return false;
+    }
     const esp_partition_t* next = esp_ota_get_next_update_partition(NULL);
     if(!next) {
         fw_ota_set_err(err, err_size, "OTA not supported (no ota slot)");
