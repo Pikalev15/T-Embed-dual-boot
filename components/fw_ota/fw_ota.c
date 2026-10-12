@@ -54,8 +54,17 @@ static void fw_ota_trim(char* s) {
     if(start) memmove(s, s + start, strlen(s + start) + 1);
 }
 
+/* The second OTA slot holds Bruce in our 16 MB dual-boot layout.
+ * Stock Flipper 2.0 OTA would erase Bruce; never permit that operation.
+ * This check identifies our exact partition geometry (not every ESP32-S3). */
+static bool fw_ota_is_bruce_layout(void) {
+    const esp_partition_t* slot = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    return slot != NULL && slot->address == 0x520000 && slot->size == 0x500000;
+}
+
 bool fw_ota_is_supported(void) {
-    return esp_ota_get_next_update_partition(NULL) != NULL;
+    return !fw_ota_is_bruce_layout() && esp_ota_get_next_update_partition(NULL) != NULL;
 }
 
 const char* fw_ota_running_partition_label(void) {
@@ -152,6 +161,10 @@ bool fw_ota_flash_file(
     void* progress_ctx,
     char* err,
     size_t err_size) {
+    if(fw_ota_is_bruce_layout()) {
+        fw_ota_set_err(err, err_size, "Dual-boot: update via USB flasher (Bruce slot protected)");
+        return false;
+    }
     const esp_partition_t* next = esp_ota_get_next_update_partition(NULL);
     if(!next) {
         fw_ota_set_err(err, err_size, "OTA not supported (no ota slot)");
