@@ -44,7 +44,7 @@ static void desktop_bruce_switch_confirmed(void) {
     DialogsApp* dialogs = furi_record_open(RECORD_DIALOGS);
     DialogMessage* msg = dialog_message_alloc();
     dialog_message_set_header(msg, "Switch to Bruce?", 64, 8, AlignCenter, AlignTop);
-    dialog_message_set_text(msg, "Restart into Bruce?\\nUnsaved work is lost.", 64, 31, AlignCenter, AlignCenter);
+    dialog_message_set_text(msg, "Restart into Bruce?\nUnsaved work is lost.", 64, 31, AlignCenter, AlignCenter);
     dialog_message_set_buttons(msg, "Cancel", NULL, "Restart");
     DialogMessageButton answer = dialog_message_show(dialogs, msg);
     dialog_message_free(msg);
