@@ -154,3 +154,6 @@ void desktop_mesh_event_cb(const MeshEventData* ev, void* ctx);
 /* Lock-Menue-Zustaende (qFlipper/BT/WiFi-Labels) neu einlesen — auch von
  * ausserhalb der Scene aufrufbar (Auto-off der qFlipper-Bridge). */
 void desktop_scene_lock_menu_refresh(Desktop* desktop);
+
+/* T-Embed shared OTA-slot startup selector. */
+bool desktop_boot_selector_should_show(void);
