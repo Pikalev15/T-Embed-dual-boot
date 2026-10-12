@@ -1,0 +1,21 @@
+name: Flipper v2 dual-boot checks
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host-contract-and-bruce-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python syntax
+        run: python3 -m py_compile patchBruce.py tools/patch_bruce_boot_selector.py tests/test_dualboot_v2.py
+      - name: Validate dual-boot invariants
+        run: python3 tests/test_dualboot_v2.py
+      - name: Validate Bruce 1.16.1 patch against pinned checkout
+        run: python3 patchBruce.py
+      - name: Ensure only intended generated Bruce files exist
+        run: |
+          test -f multi-boot/bruce/src/core/menu_items/FlipperOsMenu.cpp
+          test ! -f multi-boot/bruce/src/core/menu_items/DualBootUpdater.cpp
