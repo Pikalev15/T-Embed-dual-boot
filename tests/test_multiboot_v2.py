@@ -43,7 +43,7 @@ class MultiBootV2Tests(unittest.TestCase):
         src = self.read("components/fw_ota/fw_ota.c")
         self.assertIn("ESP_PARTITION_SUBTYPE_DATA_SPIFFS", src)
         self.assertIn("return !fw_ota_is_multiboot()", src)
-        self.assertRegex(src, r"bool fw_ota_flash_file[\\s\\S]*?if\\(!fw_ota_is_supported\\(\\)\\)")
+        self.assertIn("if(!fw_ota_is_supported())", src.split("bool fw_ota_flash_file", 1)[1])
         self.assertIn("Flipper OTA disabled in Bruce dual-boot layout", src)
 
     def test_bruce_only_minimal_return_menu(self):
