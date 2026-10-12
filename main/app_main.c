@@ -5,6 +5,9 @@
 
 #include <esp_log.h>
 #include <esp_rom_uart.h>
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
+#include <esp_system.h>
 
 static const char* TAG = "Main";
 
@@ -114,6 +117,17 @@ static void furi_log_esp_callback(const uint8_t* data, size_t size, void* contex
 }
 
 void app_main(void) {
+    /* Print before service startup so bootloader fallback can be diagnosed. */
+    const esp_partition_t* running_app = esp_ota_get_running_partition();
+    const esp_partition_t* selected_app = esp_ota_get_boot_partition();
+    esp_rom_printf(
+        "\r\n[DualBoot][Flipper] running=%s@0x%lx selected=%s@0x%lx reset=%d\r\n",
+        running_app ? running_app->label : "(none)",
+        running_app ? (unsigned long)running_app->address : 0UL,
+        selected_app ? selected_app->label : "(none)",
+        selected_app ? (unsigned long)selected_app->address : 0UL,
+        (int)esp_reset_reason());
+
     ESP_LOGI(TAG, "Starting Furi Core on ESP32...");
 
     // ESP-IDF: Scheduler is already running!
