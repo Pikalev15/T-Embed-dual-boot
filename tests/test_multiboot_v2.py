@@ -39,6 +39,25 @@ class MultiBootV2Tests(unittest.TestCase):
         self.assertIn("Switch to Bruce", view)
         self.assertIn("DesktopLockMenuEventBruce", events)
 
+    def test_icon_main_menu_boots_bruce_only_from_verified_partition(self):
+        menu = self.read("applications/services/loader/loader_menu.c")
+        self.assertIn('menu_add_item(', menu)
+        self.assertIn('"Bruce OS"', menu)
+        self.assertIn('&A_Streaming_14', menu)
+        self.assertIn('ESP_PARTITION_SUBTYPE_APP_OTA_1', menu)
+        self.assertIn('esp_ota_get_partition_description(bruce, &desc)', menu)
+        self.assertIn('bruce->address != 0x520000', menu)
+        self.assertIn('esp_ota_set_boot_partition(bruce)', menu)
+        self.assertIn('esp_restart();', menu)
+        self.assertIn('Boot Bruce OS?', menu)
+
+    def test_bruce_return_menu_rejects_invalid_flipper(self):
+        patch = self.read("tools/bruce_multiboot.patch")
+        self.assertIn('esp_ota_get_partition_description(target, &desc)', patch)
+        self.assertIn('target->address != 0x20000', patch)
+        self.assertIn('esp_ota_set_boot_partition(target)', patch)
+        self.assertIn('FlipperOsMenu::drawIcon', patch)
+
     def test_ota_cannot_erase_bruce(self):
         src = self.read("components/fw_ota/fw_ota.c")
         self.assertIn("ESP_PARTITION_SUBTYPE_DATA_SPIFFS", src)
