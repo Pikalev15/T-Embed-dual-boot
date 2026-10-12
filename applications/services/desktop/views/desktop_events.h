@@ -43,6 +43,7 @@ typedef enum {
     DesktopLockMenuEventWifiToggle,
     DesktopLockMenuEventMeshClients,
     DesktopLockMenuEventWebFs,
+    DesktopLockMenuEventBruce,
 
     DesktopMeshClientsEventPair,
     DesktopMeshClientsEventRemove,

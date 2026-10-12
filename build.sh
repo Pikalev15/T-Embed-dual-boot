@@ -84,6 +84,17 @@ if [[ -z "${SELECTED_BOARD}" || -z "${NAMES[$SELECTED_BOARD]+x}" ]]; then
     exit 1
 fi
 
+# The T-Embed dual-boot configuration cannot safely use the upstream
+# single-firmware flash pipeline. Route both build and flash through the
+# paired Flipper/Bruce workflow, preserving the original CLI arguments.
+if [[ "${SELECTED_BOARD}" == "t_embed" ]]; then
+    DUALBOOT_ARGS=()
+    [[ -n "${PORT}" ]] && DUALBOOT_ARGS+=(--port "${PORT}")
+    [[ "${RUN_MONITOR}" -eq 1 ]] && DUALBOOT_ARGS+=(--monitor)
+    [[ "${BUILD_ONLY}" -eq 1 ]] && DUALBOOT_ARGS+=(--build-only)
+    exec bash "${SCRIPT_DIR}/buildAndFlash_T-Embed.sh" "${DUALBOOT_ARGS[@]}"
+fi
+
 BOARD="${NAMES[$SELECTED_BOARD]}"
 BUILD_DIR="${DIRS[$SELECTED_BOARD]}"
 TARGET="${TARGETS[$SELECTED_BOARD]}"

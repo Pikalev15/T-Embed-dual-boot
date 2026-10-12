@@ -7,11 +7,27 @@ ESP32_DIR="${SCRIPT_DIR}"
 PORT="${ESPPORT:-}"
 RUN_MONITOR=0
 BUILD_ONLY=0
-EXPORT_SCRIPT="${ESP_IDF_EXPORT_SCRIPT:-${HOME}/esp/esp-idf/export.sh}"
+SKIP_BRUCE=0
+EXPORT_SCRIPT="${ESP_IDF_EXPORT_SCRIPT:-}"
+if [[ -z "${EXPORT_SCRIPT}" ]]; then
+    for candidate in "${HOME}/esp/esp-idf-v5.4.1/export.sh" "${HOME}/esp/esp-idf/export.sh"; do
+        if [[ -f "${candidate}" ]]; then EXPORT_SCRIPT="${candidate}"; break; fi
+    done
+fi
 
 BOARD="lilygo_t_embed_cc1101"
 BUILD_DIR="build_t_embed"
 IDF_TARGET="esp32s3"
+
+# --- Multi-boot (Bruce in the ota_1 slot) -----------------------------------
+# This board ships with two firmwares flashed side by side: this Flipper Zero
+# port in ota_0 and the Bruce firmware in ota_1 (see 00_Skills/multi-boot.md
+# and partitions_multiboot.csv). buildAndFlash builds both and flashes both.
+BRUCE_DIR="${ESP32_DIR}/multi-boot/bruce"
+BRUCE_PIO_ENV="lilygo-t-embed-cc1101"
+BRUCE_BIN="${BRUCE_DIR}/.pio/build/${BRUCE_PIO_ENV}/firmware.bin"
+PATCH_BRUCE="${ESP32_DIR}/patchBruce.py"
+PARTITIONS_CSV="${ESP32_DIR}/partitions_multiboot.csv"
 
 detect_usbmodem_port() {
     local matches=()
@@ -38,16 +54,47 @@ detect_usbmodem_port() {
     fi
 }
 
+# Locate a usable PlatformIO entry point (needed to build Bruce).
+find_pio() {
+    local cand
+    for cand in pio platformio "${HOME}/.platformio/penv/bin/pio"; do
+        if command -v "${cand}" >/dev/null 2>&1; then
+            printf '%s\n' "${cand}"
+            return 0
+        fi
+    done
+    if python3 -m platformio --version >/dev/null 2>&1; then
+        printf '%s\n' "python3 -m platformio"
+        return 0
+    fi
+    return 1
+}
+
+# Read a partition offset (e.g. "ota_1") from partitions_multiboot.csv.
+partition_offset() {
+    awk -F',' -v name="$1" '
+        $1 ~ "^[[:space:]]*"name"[[:space:]]*$" {
+            gsub(/[[:space:]]/, "", $4);
+            print $4;
+            exit
+        }' "${PARTITIONS_CSV}"
+}
+
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--port <device>] [--monitor] [--build-only]
+Usage: $(basename "$0") [--port <device>] [--monitor] [--build-only] [--skip-bruce]
 
-Builds and flashes the ESP32 Flipper Zero port for the LilyGo T-Embed CC1101.
+Builds and flashes the multi-boot image for the LilyGo T-Embed CC1101:
+  ota_0 = this ESP32 Flipper Zero port      ota_1 = Bruce firmware
+
+It runs patchBruce.py (checkout Bruce 1.16.1 + minimal return-menu patch), builds
+Bruce with PlatformIO, builds this firmware with ESP-IDF, then flashes both.
 
 Options:
   --port <device>  Serial device to flash. Default: auto-detect /dev/cu.usbmodem* (macOS) or /dev/ttyACM* (Linux)
   --monitor        Open idf.py monitor after flashing
-  --build-only     Build the firmware, skip flashing
+  --build-only     Build both firmwares, skip flashing
+  --skip-bruce     Don't touch / build / flash Bruce — only this firmware
 
 Environment:
   ESPPORT                  Overrides the auto-detected serial device
@@ -75,8 +122,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --skip-bruce)
-            # Bruce multi-boot support was removed; accept and ignore the flag
-            # so existing invocations / aliases keep working.
+            SKIP_BRUCE=1
             shift
             ;;
         --help|-h)
@@ -95,7 +141,7 @@ if [[ -z "${PORT}" && "${BUILD_ONLY}" -eq 0 ]]; then
     PORT="$(detect_usbmodem_port)"
 fi
 
-if [[ ! -f "${EXPORT_SCRIPT}" ]]; then
+if [[ -z "${EXPORT_SCRIPT}" || ! -f "${EXPORT_SCRIPT}" ]]; then
     echo "ESP-IDF export script not found: ${EXPORT_SCRIPT}" >&2
     exit 1
 fi
@@ -105,8 +151,49 @@ echo "Target:         ${IDF_TARGET}"
 echo "Build dir:      ${BUILD_DIR}"
 echo "Using ESP-IDF:  ${EXPORT_SCRIPT}"
 echo "Serial port:    ${PORT}"
+if [[ "${SKIP_BRUCE}" -eq 1 ]]; then
+    echo "Bruce:          skipped (--skip-bruce)"
+else
+    echo "Bruce:          ${BRUCE_DIR} (env ${BRUCE_PIO_ENV})"
+fi
 
 cd "${ESP32_DIR}"
+
+# ---------------------------------------------------------------------------
+# 1) Bruce: select the pinned revision, patch it, build it with PlatformIO.
+#    Done before sourcing ESP-IDF's export.sh so the two toolchains don't mix.
+# ---------------------------------------------------------------------------
+if [[ "${SKIP_BRUCE}" -eq 0 ]]; then
+    echo
+    echo "=== Preparing pinned + patched Bruce ==="
+    python3 "${PATCH_BRUCE}"
+
+    PIO_BIN="$(find_pio || true)"
+    if [[ -z "${PIO_BIN}" ]]; then
+        echo "PlatformIO not found. Install it, e.g.:" >&2
+        echo "    pipx install platformio        # or: pip3 install --user platformio" >&2
+        echo "(or rerun with --skip-bruce to build only this firmware)" >&2
+        exit 1
+    fi
+
+    echo
+    echo "=== Building Bruce (${BRUCE_PIO_ENV}) ==="
+    # shellcheck disable=SC2086
+    ${PIO_BIN} run -d "${BRUCE_DIR}" -e "${BRUCE_PIO_ENV}"
+
+    if [[ ! -f "${BRUCE_BIN}" ]]; then
+        echo "Bruce build did not produce ${BRUCE_BIN}" >&2
+        exit 1
+    fi
+    # ota_1 is exactly 5 MiB in partitions_multiboot.csv.
+    # Reject oversized firmware before touching flash.
+    BRUCE_SIZE="$(wc -c < "${BRUCE_BIN}")"
+    if (( BRUCE_SIZE > 0x500000 )); then
+        echo "Bruce image ${BRUCE_SIZE} exceeds ota_1 5 MiB limit" >&2
+        exit 1
+    fi
+    echo "Bruce firmware: ${BRUCE_BIN} (${BRUCE_SIZE} bytes)"
+fi
 
 # Kill any process holding the serial port exclusively (e.g. a left-over
 # `idf.py monitor`, `screen`, `pyserial`). Without this the flash fails with
@@ -125,6 +212,9 @@ release_serial_port() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# 2) This firmware: build (and flash) with ESP-IDF.
+# ---------------------------------------------------------------------------
 echo
 echo "=== Building this firmware ==="
 
@@ -143,14 +233,53 @@ if [[ ! -f "${BUILD_DIR}/build.ninja" ]]; then
     idf.py -B "${BUILD_DIR}" set-target "${IDF_TARGET}"
 fi
 
+# Flash Bruce's app image into the ota_1 slot, and make sure otadata is erased
+# so the bootloader boots ota_0 (this firmware) by default.
+flash_bruce() {
+    [[ "${SKIP_BRUCE}" -eq 1 ]] && return 0
+    local ota1_offset otadata_offset
+    ota1_offset="$(partition_offset ota_1)"
+    otadata_offset="$(partition_offset otadata)"
+    if [[ -z "${ota1_offset}" ]]; then
+        echo "Could not determine ota_1 offset from ${PARTITIONS_CSV}" >&2
+        exit 1
+    fi
+    echo
+    echo "=== Flashing Bruce to ota_1 (${ota1_offset}) ==="
+    release_serial_port "${PORT}"
+    # otadata is 0x2000 bytes; erasing it (-> 0xFF) makes the bootloader pick ota_0.
+    if [[ -n "${otadata_offset}" ]]; then
+        esptool.py --chip "${IDF_TARGET}" -p "${PORT}" --before default_reset --after no_reset \
+            erase_region "${otadata_offset}" 0x2000
+    fi
+    esptool.py --chip "${IDF_TARGET}" -p "${PORT}" --before default_reset --after hard_reset \
+        write_flash --flash_size detect "${ota1_offset}" "${BRUCE_BIN}"
+}
+
 if [[ "${BUILD_ONLY}" -eq 1 ]]; then
     idf.py -B "${BUILD_DIR}" -DFLIPPER_BOARD="${BOARD}" reconfigure build
+    FLIPPER_BIN="${BUILD_DIR}/furi_esp32.bin"
+    if [[ -f "${FLIPPER_BIN}" ]] && (( $(wc -c < "${FLIPPER_BIN}") > 0x500000 )); then
+        echo "Flipper image exceeds ota_0 5 MiB limit" >&2
+        exit 1
+    fi
     echo
     echo "Build complete (--build-only). Nothing flashed."
     exit 0
 fi
 
-idf.py -B "${BUILD_DIR}" -DFLIPPER_BOARD="${BOARD}" -p "${PORT}" reconfigure build flash
+idf.py -B "${BUILD_DIR}" -DFLIPPER_BOARD="${BOARD}" reconfigure build
+FLIPPER_BIN="${BUILD_DIR}/furi_esp32.bin"
+if [[ ! -f "${FLIPPER_BIN}" ]]; then
+    echo "Flipper binary not found: ${FLIPPER_BIN}" >&2
+    exit 1
+fi
+if (( $(wc -c < "${FLIPPER_BIN}") > 0x500000 )); then
+    echo "Flipper image exceeds ota_0 5 MiB limit" >&2
+    exit 1
+fi
+idf.py -B "${BUILD_DIR}" -DFLIPPER_BOARD="${BOARD}" -p "${PORT}" flash
+flash_bruce
 
 if [[ "${RUN_MONITOR}" -eq 1 ]]; then
     release_serial_port "${PORT}"
