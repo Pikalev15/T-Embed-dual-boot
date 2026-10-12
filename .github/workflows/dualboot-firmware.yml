@@ -2,7 +2,7 @@ name: Build T-Embed Dual Boot (Flipper latest + Bruce 1.16.1)
 
 on:
   push:
-    branches: [flipper-v2-dualboot-latest]
+    branches: [main, flipper-v2-dualboot-latest]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -79,3 +79,46 @@ jobs:
           path: artifact_staging/
           if-no-files-found: error
           retention-days: 30
+
+  pages:
+    name: Publish verified dual-boot web flasher
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: dualboot
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: https://pikalev15.github.io/T-Embed-dual-boot/
+    steps:
+      - name: Checkout web UI
+        uses: actions/checkout@v4
+      - name: Download validated firmware from this build
+        uses: actions/download-artifact@v4
+        with:
+          name: t-embed-dualboot-flasher
+          path: _firmware
+      - name: Assemble Pages site
+        run: |
+          mkdir -p site/firmware
+          cp pages/index.html site/index.html
+          # Replace original single-OS /interface.html route too.
+          cp pages/index.html site/interface.html
+          cp -a _firmware/. site/firmware/
+          touch site/.nojekyll
+          python3 tools/flash_dualboot.py --bundle site/firmware --dry-run
+          test -s site/firmware/furi_esp32.bin
+          test -s site/firmware/bruce.bin
+          test -s site/firmware/manifest.json
+          test -s site/index.html
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload site with both firmware images
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
